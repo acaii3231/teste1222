@@ -14,7 +14,6 @@ import { SettingsTab } from "@/components/admin/SettingsTab";
 import { FieldsConfigTab } from "@/components/admin/FieldsConfigTab";
 import { SecurityTab } from "@/components/admin/SecurityTab";
 import { PaymentTab } from "@/components/admin/PaymentTab";
-import { BlackFridayTab } from "@/components/admin/BlackFridayTab";
 import { ChatBot } from "@/components/admin/ChatBot";
 import { NetflixLoader } from "@/components/admin/NetflixLoader";
 
@@ -961,19 +960,6 @@ const Admin = () => {
               </svg>
               Pagamento
             </button>
-            <button
-              onClick={() => setActiveTab("blackfriday")}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                activeTab === "blackfriday"
-                  ? "bg-purple-600 text-white"
-                  : "text-gray-400 hover:bg-gray-800 hover:text-white"
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
-              </svg>
-              Black Friday
-            </button>
           </div>
 
           {/* Footer Sidebar */}
@@ -1092,10 +1078,6 @@ const Admin = () => {
           
           <TabsContent value="payment">
             <PaymentTab />
-          </TabsContent>
-          
-          <TabsContent value="blackfriday">
-            <BlackFridayTab />
           </TabsContent>
           
           <TabsContent value="pixels">

@@ -11,7 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import { supabaseClient as supabase } from "@/lib/supabase-helpers";
 import { initFacebookPixel, trackInitiateCheckout, trackPurchase, trackAddToCart } from "@/lib/facebook-pixel";
 import { createPix, checkPixStatus } from "@/lib/pix-api";
-import { BlackFridayWheel } from "@/components/BlackFridayWheel";
 import "@/lib/security"; // Carrega proteções de segurança
 
 const Checkout = () => {
@@ -76,14 +75,6 @@ const Checkout = () => {
   
   // Payment status
   const [paymentStatus, setPaymentStatus] = useState<string>('pending');
-
-  // Black Friday state
-  const [showBlackFridayWheel, setShowBlackFridayWheel] = useState(false);
-  const [blackFridayActive, setBlackFridayActive] = useState(false);
-  const [blackFridayDiscountPrice, setBlackFridayDiscountPrice] = useState(0);
-  const [blackFridayOriginalPrice, setBlackFridayOriginalPrice] = useState(0);
-  const [blackFridayDiscountPercent, setBlackFridayDiscountPercent] = useState(0);
-  const [blackFridayApplied, setBlackFridayApplied] = useState(false);
 
   // Security: Check mobile-only and IP blocking
   useEffect(() => {
@@ -233,76 +224,6 @@ const Checkout = () => {
     };
   }, [pixData?.pixId, selectedUpsells, upsells, mainProductPrice, pixelOnPurchase, purchaseTracked]);
 
-  // Handle Black Friday win
-  const handleBlackFridayWin = () => {
-    setBlackFridayApplied(true);
-    setMainProductPrice(blackFridayDiscountPrice);
-    toast({
-      title: "🎉 Parabéns!",
-      description: `Você ganhou ${blackFridayDiscountPercent}% de desconto!`,
-    });
-  };
-
-  // Load Black Friday config
-  useEffect(() => {
-    const loadBlackFridayConfig = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('site_config' as any)
-          .select('*')
-          .in('key', ['black_friday_active', 'black_friday_product_price', 'black_friday_discount_price']);
-
-        if (error) {
-          console.error('Erro ao carregar Black Friday:', error);
-          return;
-        }
-
-        if (data) {
-          let isActive = false;
-          let originalPrice = 0;
-          let discountPrice = 0;
-
-          (data as any[]).forEach((config: any) => {
-            if (config.key === 'black_friday_active') {
-              isActive = config.value === 'true';
-            } else if (config.key === 'black_friday_product_price') {
-              originalPrice = parseFloat(config.value?.replace(',', '.') || '0');
-            } else if (config.key === 'black_friday_discount_price') {
-              discountPrice = parseFloat(config.value?.replace(',', '.') || '0');
-            }
-          });
-
-          setBlackFridayActive(isActive);
-          setBlackFridayOriginalPrice(originalPrice);
-          setBlackFridayDiscountPrice(discountPrice);
-
-          if (originalPrice > 0 && discountPrice > 0) {
-            const percent = ((originalPrice - discountPrice) / originalPrice) * 100;
-            setBlackFridayDiscountPercent(Math.round(percent));
-          }
-
-          // Verificar se já jogou e ganhou
-          const hasWon = localStorage.getItem('black_friday_won') === 'true';
-          if (hasWon && isActive) {
-            setBlackFridayApplied(true);
-            setMainProductPrice(discountPrice);
-          }
-
-          // Mostrar roleta se ativo e ainda não jogou
-          if (isActive && !localStorage.getItem('black_friday_played')) {
-            // Aguardar um pouco antes de mostrar
-            setTimeout(() => {
-              setShowBlackFridayWheel(true);
-            }, 1000);
-          }
-        }
-      } catch (error) {
-        console.error('Erro ao carregar Black Friday:', error);
-      }
-    };
-
-    loadBlackFridayConfig();
-  }, [blackFridayDiscountPrice]);
 
   // Load upsell config from database
   useEffect(() => {
@@ -971,16 +892,6 @@ const Checkout = () => {
         />
       )}
 
-      {showBlackFridayWheel && blackFridayActive && (
-        <BlackFridayWheel
-          isOpen={showBlackFridayWheel}
-          onClose={() => setShowBlackFridayWheel(false)}
-          onWin={handleBlackFridayWin}
-          originalPrice={blackFridayOriginalPrice || mainProductPrice}
-          discountPrice={blackFridayDiscountPrice}
-          discountPercent={blackFridayDiscountPercent}
-        />
-      )}
     </div>
   );
 };
