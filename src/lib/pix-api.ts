@@ -1,16 +1,16 @@
-// Helper para chamar API PIX - funciona automaticamente em localhost e Vercel
+// Helper para chamar API PIX - funciona automaticamente em localhost e Netlify
 
 /**
- * Criar PIX - tenta rotas Vercel primeiro, depois localhost, depois Supabase
+ * Criar PIX - tenta rotas Netlify primeiro, depois localhost, depois Supabase
  */
 export async function createPix(value: number): Promise<{
   id: string;
   copiaCola: string;
   qrCode: string;
 }> {
-  // 1. Tentar rota Vercel (funciona em produção e localhost se configurado)
+  // 1. Tentar rota Netlify (funciona em produção e localhost se configurado)
   try {
-    const vercelResponse = await fetch('/api/pix/create', {
+    const netlifyResponse = await fetch('/api/pix/create', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -18,9 +18,9 @@ export async function createPix(value: number): Promise<{
       body: JSON.stringify({ value }),
     });
 
-    if (vercelResponse.ok) {
-      const data = await vercelResponse.json();
-      console.log('✅ PIX criado via rota Vercel:', data);
+    if (netlifyResponse.ok) {
+      const data = await netlifyResponse.json();
+      console.log('✅ PIX criado via rota Netlify:', data);
       
       return {
         id: data.id || '',
@@ -29,7 +29,7 @@ export async function createPix(value: number): Promise<{
       };
     }
   } catch (error) {
-    console.log('⚠️  Rota Vercel não disponível, tentando localhost...');
+    console.log('⚠️  Rota Netlify não disponível, tentando localhost...');
   }
 
   // 2. Tentar localhost (desenvolvimento local)
@@ -87,7 +87,7 @@ export async function createPix(value: number): Promise<{
 }
 
 /**
- * Verificar status do PIX - tenta rotas Vercel primeiro, depois localhost, depois Supabase
+ * Verificar status do PIX - tenta rotas Netlify primeiro, depois localhost, depois Supabase
  */
 export async function checkPixStatus(pixId: string): Promise<{
   id: string;
@@ -95,18 +95,18 @@ export async function checkPixStatus(pixId: string): Promise<{
   value?: number;
   paid_at?: string;
 }> {
-  // 1. Tentar rota Vercel (funciona em produção e localhost se configurado)
+  // 1. Tentar rota Netlify (funciona em produção e localhost se configurado)
   try {
-    const vercelResponse = await fetch(`/api/pix/check-by-pixid/${pixId}`, {
+    const netlifyResponse = await fetch(`/api/pix/check-by-pixid/${pixId}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       }
     });
 
-    if (vercelResponse.ok) {
-      const data = await vercelResponse.json();
-      console.log('✅ Status verificado via rota Vercel:', data);
+    if (netlifyResponse.ok) {
+      const data = await netlifyResponse.json();
+      console.log('✅ Status verificado via rota Netlify:', data);
       
       return {
         id: data.id || pixId,
@@ -116,7 +116,7 @@ export async function checkPixStatus(pixId: string): Promise<{
       };
     }
   } catch (error) {
-    console.log('⚠️  Rota Vercel não disponível, tentando localhost...');
+    console.log('⚠️  Rota Netlify não disponível, tentando localhost...');
   }
 
   // 2. Tentar localhost (desenvolvimento local)

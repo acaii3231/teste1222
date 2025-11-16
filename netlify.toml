@@ -1,0 +1,22 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/api/pix/create"
+  to = "/.netlify/functions/pix-create"
+  status = 200
+
+[[redirects]]
+  from = "/api/pix/check-by-pixid/*"
+  to = "/.netlify/functions/pix-check"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[build.environment]
+  NODE_VERSION = "20"
+
