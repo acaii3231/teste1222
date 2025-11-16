@@ -43,6 +43,12 @@ const Admin = () => {
   const [pixelOnCheckout, setPixelOnCheckout] = useState(true);
   const [pixelOnPurchase, setPixelOnPurchase] = useState(true);
   const [showNetflixLoader, setShowNetflixLoader] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => {
+    // Se não está logado, não precisa carregar
+    const saved = localStorage.getItem('admin_logged_in');
+    return saved === 'true';
+  });
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   // Upsell configuration
   interface Upsell {
@@ -77,15 +83,17 @@ const Admin = () => {
 
   // Load transactions from database
   const loadTransactions = async () => {
-    const { data, error } = await supabase
-      .from('transactions' as any)
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error('Error loading transactions:', error);
-      return;
-    }
+    try {
+      const { data, error } = await supabase
+        .from('transactions' as any)
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error loading transactions:', error);
+        setLoadError('Erro ao carregar transações. Verifique a conexão com o Supabase.');
+        return;
+      }
     
     if (data) {
       const formattedTransactions: Transaction[] = (data as any[]).map((t: any) => ({
@@ -123,80 +131,121 @@ const Admin = () => {
         upsellConversion: totalSales > 0 ? (ordersWithUpsell / totalSales) * 100 : 0,
       });
     }
+    } catch (error: any) {
+      console.error('Error in loadTransactions:', error);
+      setLoadError('Erro ao carregar transações. Tente atualizar a página.');
+    }
   };
 
   useEffect(() => {
+    if (!isLoggedIn) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+
     const loadPixelConfig = async () => {
-      const { data } = await supabase
-        .from('site_config' as any)
-        .select('*')
-        .in('key', ['facebook_pixel_id', 'facebook_token', 'pixel_on_checkout', 'pixel_on_purchase']);
-      
-      if (data) {
-        (data as any[]).forEach((config: any) => {
-          if (config.key === 'facebook_pixel_id') setFacebookPixelId(config.value);
-          if (config.key === 'facebook_token') setFacebookToken(config.value);
-          if (config.key === 'pixel_on_checkout') setPixelOnCheckout(config.value === 'true');
-          if (config.key === 'pixel_on_purchase') setPixelOnPurchase(config.value === 'true');
-        });
+      try {
+        const { data, error } = await supabase
+          .from('site_config' as any)
+          .select('*')
+          .in('key', ['facebook_pixel_id', 'facebook_token', 'pixel_on_checkout', 'pixel_on_purchase']);
+        
+        if (error) {
+          console.error('Error loading pixel config:', error);
+          return;
+        }
+        
+        if (data) {
+          (data as any[]).forEach((config: any) => {
+            if (config.key === 'facebook_pixel_id') setFacebookPixelId(config.value);
+            if (config.key === 'facebook_token') setFacebookToken(config.value);
+            if (config.key === 'pixel_on_checkout') setPixelOnCheckout(config.value === 'true');
+            if (config.key === 'pixel_on_purchase') setPixelOnPurchase(config.value === 'true');
+          });
+        }
+      } catch (error) {
+        console.error('Error in loadPixelConfig:', error);
       }
     };
     
     const loadUpsellConfig = async () => {
-      const { data } = await supabase
-        .from('upsell_config' as any)
-        .select('*')
-        .order('order', { ascending: true });
-      
-      if (data) {
-        setUpsells(data as Upsell[]);
+      try {
+        const { data, error } = await supabase
+          .from('upsell_config' as any)
+          .select('*')
+          .order('order', { ascending: true });
+        
+        if (error) {
+          console.error('Error loading upsell config:', error);
+          return;
+        }
+        
+        if (data) {
+          setUpsells(data as Upsell[]);
+        }
+      } catch (error) {
+        console.error('Error in loadUpsellConfig:', error);
       }
     };
     
-    if (isLoggedIn) {
-      loadTransactions();
-      loadUpsellConfig();
-      loadPixelConfig();
-      
-      // Subscribe realtime para transações
-      const transactionsChannel = supabase
-        .channel('transactions-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'transactions'
-          },
-          () => {
-            console.log('Transação atualizada em tempo real');
-            loadTransactions();
-          }
-        )
-        .subscribe();
+    const loadAllData = async () => {
+      try {
+        await Promise.all([
+          loadTransactions(),
+          loadUpsellConfig(),
+          loadPixelConfig()
+        ]);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setLoadError('Erro ao carregar dados. Verifique a conexão com o Supabase.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-      // Subscribe realtime para upsells
-      const upsellsChannel = supabase
-        .channel('upsells-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'upsell_config'
-          },
-          () => {
-            console.log('Upsell atualizado em tempo real');
-            loadUpsellConfig();
-          }
-        )
-        .subscribe();
+    loadAllData();
       
-      return () => {
-        supabase.removeChannel(transactionsChannel);
-        supabase.removeChannel(upsellsChannel);
-      };
-    }
+    // Subscribe realtime para transações
+    const transactionsChannel = supabase
+      .channel('transactions-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions'
+        },
+        () => {
+          console.log('Transação atualizada em tempo real');
+          loadTransactions();
+        }
+      )
+      .subscribe();
+
+    // Subscribe realtime para upsells
+    const upsellsChannel = supabase
+      .channel('upsells-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'upsell_config'
+        },
+        () => {
+          console.log('Upsell atualizado em tempo real');
+          loadUpsellConfig();
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(transactionsChannel);
+      supabase.removeChannel(upsellsChannel);
+    };
   }, [isLoggedIn]);
 
   const handleLogin = () => {
@@ -709,8 +758,39 @@ const Admin = () => {
 
   const [activeTab, setActiveTab] = useState("dashboard");
 
+  // Mostrar loading enquanto carrega dados
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <p className="text-gray-400">Carregando painel admin...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      {/* Banner de erro se houver problema ao carregar */}
+      {loadError && (
+        <div className="bg-yellow-900/50 border-b border-yellow-700 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="text-yellow-300 text-sm">{loadError}</p>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-yellow-400 hover:text-yellow-300 text-sm underline"
+            >
+              Atualizar página
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex h-screen">
         {/* Sidebar Esquerdo */}
         <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
