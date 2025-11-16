@@ -1,15 +1,4 @@
 {
-  "functions": {
-    "api/data.ts": {
-      "runtime": "@vercel/node"
-    },
-    "api/pix/create.ts": {
-      "runtime": "@vercel/node"
-    },
-    "api/pix/check-by-pixid/[id].ts": {
-      "runtime": "@vercel/node"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/data",
