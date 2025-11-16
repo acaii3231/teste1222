@@ -350,8 +350,14 @@ const Checkout = () => {
           // Disparar Purchase apenas se ainda não foi disparado
           if (newStatus === 'paid' && pixelOnPurchase && !purchaseTracked) {
             const totalValue = (payload.new as any).total_value;
-            console.log('📊 Disparando evento Purchase via subscription');
-            trackPurchase(totalValue, 'BRL', transactionId);
+            // Garantir que o valor está em reais (total_value já vem em reais do banco)
+            const valueInReais = typeof totalValue === 'number' ? totalValue : parseFloat(totalValue) || 0;
+            console.log('📊 Disparando evento Purchase via subscription:', {
+              totalValue,
+              valueInReais,
+              transactionId
+            });
+            trackPurchase(valueInReais, 'BRL', transactionId);
             setPurchaseTracked(true); // Marcar como já disparado
           }
         }
