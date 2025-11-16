@@ -8,15 +8,11 @@ VITE_SUPABASE_URL=https://qpzutdlkeegwiqkphqkj.supabase.co
 ```
 
 ### Chave Pública (anon key):
-⚠️ **IMPORTANTE:** O token fornecido (`sbp_00e09d9b0ae42f6023fc0ca3107d58b341c24525`) parece ser um token de projeto, não a chave anon/public.
+```
+VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwenV0ZGxrZWVnd2lxa3BocWtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNjkwNDIsImV4cCI6MjA3ODg0NTA0Mn0.GPGf0fRQCgCJcEhb6RVfCgNxhDFz2uy_5in4lttO52M
+```
 
-**Você precisa obter a chave anon correta:**
-
-1. Acesse: https://supabase.com/dashboard
-2. Selecione o projeto: `qpzutdlkeegwiqkphqkj`
-3. Vá em **Settings** > **API**
-4. Copie a chave **"anon"** ou **"public"** (não use service_role)
-5. A chave anon geralmente começa com `eyJ...` (é um JWT)
+✅ **Chave anon configurada corretamente!**
 
 ## 🔧 Configurar no Netlify
 
@@ -39,7 +35,7 @@ VITE_SUPABASE_URL=https://qpzutdlkeegwiqkphqkj.supabase.co
 
    **Variável 2:**
    - **Key:** `VITE_SUPABASE_PUBLISHABLE_KEY`
-   - **Value:** `[cole aqui a chave anon/public que você copiou do Supabase Dashboard]`
+   - **Value:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwenV0ZGxrZWVnd2lxa3BocWtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNjkwNDIsImV4cCI6MjA3ODg0NTA0Mn0.GPGf0fRQCgCJcEhb6RVfCgNxhDFz2uy_5in4lttO52M`
    - **Scopes:** Selecione todas (Production, Deploy previews, Branch deploys)
 
 4. **Salve e Faça Redeploy:**
@@ -51,16 +47,16 @@ VITE_SUPABASE_URL=https://qpzutdlkeegwiqkphqkj.supabase.co
 
 ```env
 VITE_SUPABASE_URL=https://qpzutdlkeegwiqkphqkj.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=[sua_chave_anon_do_dashboard]
+VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwenV0ZGxrZWVnd2lxa3BocWtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNjkwNDIsImV4cCI6MjA3ODg0NTA0Mn0.GPGf0fRQCgCJcEhb6RVfCgNxhDFz2uy_5in4lttO52M
 ```
 
 ## ⚠️ Importante
 
-- ✅ Use a chave **"anon"** ou **"public"** (não a service_role)
+- ✅ **Use `VITE_` no Netlify** (não `NEXT_PUBLIC_` - esse projeto usa Vite, não Next.js)
 - ✅ A chave anon é segura para usar no frontend
 - ✅ As variáveis devem começar com `VITE_` para funcionar no Vite
 - ✅ Após adicionar as variáveis, faça um redeploy
-- ❌ **NÃO use** o token `sbp_...` - esse é um token de projeto, não a chave anon
+- ✅ Chave anon já configurada corretamente!
 
 ## 🎯 Verificação
 

@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://qpzutdlkeegwiqkphqkj.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwenV0ZGxrZWVnd2lxa3BocWtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNjkwNDIsImV4cCI6MjA3ODg0NTA0Mn0.GPGf0fRQCgCJcEhb6RVfCgNxhDFz2uy_5in4lttO52M';
 
 // Verificar se as variáveis estão definidas
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
