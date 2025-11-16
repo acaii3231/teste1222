@@ -1,20 +1,6 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": "vite",
-  "rewrites": [
-    {
-      "source": "/api/data",
-      "destination": "/api/data.ts"
-    },
-    {
-      "source": "/api/pix/create",
-      "destination": "/api/pix/create.ts"
-    },
-    {
-      "source": "/api/pix/check-by-pixid/:id",
-      "destination": "/api/pix/check-by-pixid/[id].ts"
-    }
-  ]
+  "framework": "vite"
 }
 
