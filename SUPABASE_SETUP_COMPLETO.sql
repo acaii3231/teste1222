@@ -1,7 +1,7 @@
 -- ============================================
 -- SCRIPT COMPLETO PARA CONFIGURAR SUPABASE
 -- Execute este script no SQL Editor do Supabase Dashboard
--- Este script configura TUDO para funcionar no Vercel
+-- Este script configura TUDO para funcionar no Netlify/Vercel
 -- ============================================
 
 -- ============================================
@@ -90,6 +90,7 @@ DROP POLICY IF EXISTS "Permitir atualização pública de configurações" ON pu
 DROP POLICY IF EXISTS "Permitir leitura pública de transações" ON public.transactions;
 DROP POLICY IF EXISTS "Permitir inserção pública de transações" ON public.transactions;
 DROP POLICY IF EXISTS "Permitir atualização pública de transações" ON public.transactions;
+DROP POLICY IF EXISTS "Permitir exclusão pública de transações" ON public.transactions;
 
 -- upsell_config
 DROP POLICY IF EXISTS "upsell_config_select_policy" ON public.upsell_config;
@@ -146,6 +147,11 @@ ON public.transactions FOR UPDATE
 TO anon, authenticated 
 USING (true) 
 WITH CHECK (true);
+
+CREATE POLICY "Permitir exclusão pública de transações" 
+ON public.transactions FOR DELETE 
+TO anon, authenticated 
+USING (true);
 
 -- ============================================
 -- 7. CRIAR POLÍTICAS RLS PARA upsell_config
@@ -309,6 +315,12 @@ WHERE id = 'upsells';
 -- ============================================
 -- ✅ SCRIPT CONCLUÍDO!
 -- ============================================
--- Agora seu Supabase está configurado para funcionar no Vercel!
+-- Agora seu Supabase está configurado para funcionar no Netlify!
+-- 
+-- Próximos passos:
+-- 1. Configure as variáveis de ambiente no Netlify:
+--    - VITE_SUPABASE_URL=https://qpzutdlkeegwiqkphqkj.supabase.co
+--    - VITE_SUPABASE_PUBLISHABLE_KEY=[sua_chave_anon_do_dashboard]
+-- 2. Veja o arquivo VARIAVEIS_NETLIFY.md para instruções detalhadas
 -- ============================================
 

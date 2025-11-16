@@ -81,59 +81,130 @@ const Admin = () => {
   // Transactions from database
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
+  // Função para carregar configurações do pixel
+  const loadPixelConfig = async () => {
+    try {
+      console.log('🔄 Carregando configurações do pixel...');
+      const { data, error } = await supabase
+        .from('site_config' as any)
+        .select('*')
+        .in('key', ['facebook_pixel_id', 'facebook_token', 'pixel_on_checkout', 'pixel_on_purchase']);
+      
+      if (error) {
+        console.error('❌ Erro ao carregar pixel config:', error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        console.log('✅ Configurações do pixel carregadas');
+        (data as any[]).forEach((config: any) => {
+          if (config.key === 'facebook_pixel_id') setFacebookPixelId(config.value);
+          if (config.key === 'facebook_token') setFacebookToken(config.value);
+          if (config.key === 'pixel_on_checkout') setPixelOnCheckout(config.value === 'true');
+          if (config.key === 'pixel_on_purchase') setPixelOnPurchase(config.value === 'true');
+        });
+      } else {
+        console.log('ℹ️ Nenhuma configuração de pixel encontrada, usando valores padrão');
+      }
+    } catch (error) {
+      console.error('❌ Erro inesperado em loadPixelConfig:', error);
+    }
+  };
+  
+  // Função para carregar upsells
+  const loadUpsellConfig = async () => {
+    try {
+      console.log('🔄 Carregando upsells...');
+      const { data, error } = await supabase
+        .from('upsell_config' as any)
+        .select('*')
+        .order('order', { ascending: true });
+      
+      if (error) {
+        console.error('❌ Erro ao carregar upsells:', error);
+        setUpsells([]);
+        return;
+      }
+      
+      if (data) {
+        console.log('✅ Upsells carregados:', data.length);
+        setUpsells(data as Upsell[]);
+      } else {
+        console.log('ℹ️ Nenhum upsell encontrado');
+        setUpsells([]);
+      }
+    } catch (error) {
+      console.error('❌ Erro inesperado em loadUpsellConfig:', error);
+      setUpsells([]);
+    }
+  };
+
   // Load transactions from database
   const loadTransactions = async () => {
     try {
+      console.log('🔄 Carregando transações...');
       const { data, error } = await supabase
         .from('transactions' as any)
         .select('*')
         .order('created_at', { ascending: false });
       
       if (error) {
-        console.error('Error loading transactions:', error);
-        setLoadError('Erro ao carregar transações. Verifique a conexão com o Supabase.');
+        console.error('❌ Erro ao carregar transações:', error);
+        console.error('Detalhes do erro:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
+        setLoadError(`Erro ao carregar transações: ${error.message || 'Erro desconhecido'}. Verifique a conexão com o Supabase.`);
+        setTransactions([]); // Limpar transações em caso de erro
         return;
       }
     
-    if (data) {
-      const formattedTransactions: Transaction[] = (data as any[]).map((t: any) => ({
-        id: t.id,
-        name: t.name || 'Não informado',
-        phone: t.phone || t.whatsapp || '',
-        email: t.email || '',
-        cpf: t.cpf || '',
-        value: `R$ ${t.total_value.toFixed(2).replace('.', ',')}`,
-        date: new Date(t.created_at).toLocaleDateString('pt-BR'),
-        status: t.status === 'paid' ? 'Pago' : t.status === 'awaiting_payment' ? 'Aguardando' : 'Pendente',
-        upsell_added: t.upsell_added || false,
-        ip_address: t.ip_address || undefined,
-      }));
-      
-      console.log('Transações carregadas:', formattedTransactions);
-      setTransactions(formattedTransactions);
-      
-      // Calculate dashboard stats
-      const totalSales = (data as any[]).length;
-      const totalRevenue = (data as any[]).reduce((sum: number, t: any) => sum + t.total_value, 0);
-      const paidRevenue = (data as any[]).filter((t: any) => t.status === 'paid').reduce((sum: number, t: any) => sum + t.total_value, 0);
-      const paidOrders = (data as any[]).filter((t: any) => t.status === 'paid').length;
-      const pendingOrders = (data as any[]).filter((t: any) => t.status !== 'paid').length;
-      const ordersWithUpsell = (data as any[]).filter((t: any) => t.upsell_added).length;
-      
-      setDashboardStats({
-        totalSales,
-        totalRevenue,
-        paidRevenue,
-        conversionRate: totalSales > 0 ? (paidOrders / totalSales) * 100 : 0,
-        averageTicket: totalSales > 0 ? totalRevenue / totalSales : 0,
-        pendingOrders,
-        paidOrders,
-        upsellConversion: totalSales > 0 ? (ordersWithUpsell / totalSales) * 100 : 0,
-      });
-    }
+      if (data) {
+        console.log('✅ Transações carregadas:', data.length);
+        const formattedTransactions: Transaction[] = (data as any[]).map((t: any) => ({
+          id: t.id,
+          name: t.name || 'Não informado',
+          phone: t.phone || t.whatsapp || '',
+          email: t.email || '',
+          cpf: t.cpf || '',
+          value: `R$ ${(t.total_value || 0).toFixed(2).replace('.', ',')}`,
+          date: t.created_at ? new Date(t.created_at).toLocaleDateString('pt-BR') : 'N/A',
+          status: t.status === 'paid' ? 'Pago' : t.status === 'awaiting_payment' ? 'Aguardando' : 'Pendente',
+          upsell_added: t.upsell_added || false,
+          ip_address: t.ip_address || undefined,
+        }));
+        
+        setTransactions(formattedTransactions);
+        setLoadError(null); // Limpar erro se carregou com sucesso
+        
+        // Calculate dashboard stats
+        const totalSales = (data as any[]).length;
+        const totalRevenue = (data as any[]).reduce((sum: number, t: any) => sum + (Number(t.total_value) || 0), 0);
+        const paidRevenue = (data as any[]).filter((t: any) => t.status === 'paid').reduce((sum: number, t: any) => sum + (Number(t.total_value) || 0), 0);
+        const paidOrders = (data as any[]).filter((t: any) => t.status === 'paid').length;
+        const pendingOrders = (data as any[]).filter((t: any) => t.status !== 'paid').length;
+        const ordersWithUpsell = (data as any[]).filter((t: any) => t.upsell_added).length;
+        
+        setDashboardStats({
+          totalSales,
+          totalRevenue,
+          paidRevenue,
+          conversionRate: totalSales > 0 ? (paidOrders / totalSales) * 100 : 0,
+          averageTicket: totalSales > 0 ? totalRevenue / totalSales : 0,
+          pendingOrders,
+          paidOrders,
+          upsellConversion: totalSales > 0 ? (ordersWithUpsell / totalSales) * 100 : 0,
+        });
+      } else {
+        console.log('ℹ️ Nenhuma transação encontrada');
+        setTransactions([]);
+      }
     } catch (error: any) {
-      console.error('Error in loadTransactions:', error);
-      setLoadError('Erro ao carregar transações. Tente atualizar a página.');
+      console.error('❌ Erro inesperado em loadTransactions:', error);
+      setLoadError(`Erro inesperado: ${error.message || 'Erro desconhecido'}. Tente atualizar a página.`);
+      setTransactions([]);
     }
   };
 
@@ -145,64 +216,30 @@ const Admin = () => {
 
     setIsLoading(true);
     setLoadError(null);
-
-    const loadPixelConfig = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('site_config' as any)
-          .select('*')
-          .in('key', ['facebook_pixel_id', 'facebook_token', 'pixel_on_checkout', 'pixel_on_purchase']);
-        
-        if (error) {
-          console.error('Error loading pixel config:', error);
-          return;
-        }
-        
-        if (data) {
-          (data as any[]).forEach((config: any) => {
-            if (config.key === 'facebook_pixel_id') setFacebookPixelId(config.value);
-            if (config.key === 'facebook_token') setFacebookToken(config.value);
-            if (config.key === 'pixel_on_checkout') setPixelOnCheckout(config.value === 'true');
-            if (config.key === 'pixel_on_purchase') setPixelOnPurchase(config.value === 'true');
-          });
-        }
-      } catch (error) {
-        console.error('Error in loadPixelConfig:', error);
-      }
-    };
-    
-    const loadUpsellConfig = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('upsell_config' as any)
-          .select('*')
-          .order('order', { ascending: true });
-        
-        if (error) {
-          console.error('Error loading upsell config:', error);
-          return;
-        }
-        
-        if (data) {
-          setUpsells(data as Upsell[]);
-        }
-      } catch (error) {
-        console.error('Error in loadUpsellConfig:', error);
-      }
-    };
     
     const loadAllData = async () => {
       try {
-        await Promise.all([
+        console.log('🚀 Iniciando carregamento de todos os dados...');
+        // Carregar em paralelo, mas com tratamento individual de erros
+        const results = await Promise.allSettled([
           loadTransactions(),
           loadUpsellConfig(),
           loadPixelConfig()
         ]);
+        
+        // Verificar se algum falhou
+        const failures = results.filter(r => r.status === 'rejected');
+        if (failures.length > 0) {
+          console.warn('⚠️ Alguns dados não foram carregados:', failures);
+        }
+        
+        console.log('✅ Carregamento de dados concluído');
       } catch (error) {
-        console.error('Error loading data:', error);
-        setLoadError('Erro ao carregar dados. Verifique a conexão com o Supabase.');
+        console.error('❌ Erro crítico ao carregar dados:', error);
+        setLoadError('Erro crítico ao carregar dados. Verifique a conexão com o Supabase e tente atualizar a página.');
       } finally {
         setIsLoading(false);
+        console.log('🏁 Estado de loading finalizado');
       }
     };
 
@@ -246,6 +283,7 @@ const Admin = () => {
       supabase.removeChannel(transactionsChannel);
       supabase.removeChannel(upsellsChannel);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]);
 
   const handleLogin = () => {
@@ -1006,19 +1044,11 @@ const Admin = () => {
               transactions={transactions}
               onClearMetrics={handleClearMetrics}
               onRestoreBackup={handleRestoreBackup}
-              onRefresh={() => {
-                loadTransactions();
-                const loadUpsellConfig = async () => {
-                  const { data } = await supabase
-                    .from('upsell_config' as any)
-                    .select('*')
-                    .order('order', { ascending: true });
-                  
-                  if (data) {
-                    setUpsells(data as Upsell[]);
-                  }
-                };
-                loadUpsellConfig();
+              onRefresh={async () => {
+                await Promise.all([
+                  loadTransactions(),
+                  loadUpsellConfig()
+                ]);
                 toast({
                   description: "Dados atualizados",
                 });
