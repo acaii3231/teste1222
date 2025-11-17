@@ -60,24 +60,91 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
     }
   };
 
-  const copyToClipboard = () => {
+  const copyToClipboard = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     if (!qrCode) {
       alert('Código PIX ainda não está disponível');
       return;
     }
-    navigator.clipboard.writeText(qrCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    
+    try {
+      // Tenta usar a API moderna do clipboard
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(qrCode);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } else {
+        // Fallback para dispositivos mais antigos
+        const textArea = document.createElement('textarea');
+        textArea.value = qrCode;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+          document.execCommand('copy');
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+          console.error('Erro ao copiar:', err);
+          alert('Não foi possível copiar. Por favor, selecione e copie manualmente.');
+        } finally {
+          document.body.removeChild(textArea);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao copiar para clipboard:', error);
+      alert('Não foi possível copiar. Por favor, selecione e copie manualmente.');
+    }
   };
 
   // Se o pagamento foi confirmado, mostrar mensagem de sucesso
   if (localPaymentStatus === 'paid') {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-        <div className="bg-background rounded-2xl max-w-md w-full p-6 relative my-8">
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }
+        }}
+        onTouchStart={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+      >
+        <div 
+          className="bg-background rounded-2xl max-w-md w-full p-6 relative my-8"
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+          }}
+        >
           <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 hover:bg-muted rounded-full transition-colors z-10"
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="absolute top-4 right-4 p-2 hover:bg-muted rounded-full transition-colors z-10 touch-manipulation"
           >
             <X className="w-5 h-5" />
           </button>
@@ -103,8 +170,17 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
             </p>
 
             <button
-              onClick={onClose}
-              className="w-full mt-6 h-12 bg-green-600 hover:bg-green-700 text-white rounded-full font-semibold transition-colors"
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              className="w-full mt-6 h-12 bg-green-600 hover:bg-green-700 text-white rounded-full font-semibold transition-colors touch-manipulation"
             >
               Fechar
             </button>
@@ -115,11 +191,43 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-background rounded-2xl max-w-md w-full p-6 relative my-8">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+      onTouchStart={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+    >
+      <div 
+        className="bg-background rounded-2xl max-w-md w-full p-6 relative my-8"
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+        }}
+      >
         <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 hover:bg-muted rounded-full transition-colors z-10"
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }}
+          onTouchStart={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          className="absolute top-4 right-4 p-2 hover:bg-muted rounded-full transition-colors z-10 touch-manipulation"
         >
           <X className="w-5 h-5" />
         </button>
@@ -178,8 +286,12 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
           <div className="bg-muted/20 rounded-xl p-4 mb-4">
             <p className="text-xs text-muted-foreground mb-2 font-medium text-center">COPIAR CÓDIGO:</p>
             <div 
-              onClick={copyToClipboard}
-              className="bg-background border border-border rounded-lg p-3 break-all text-xs text-foreground font-mono max-h-32 overflow-y-auto cursor-pointer hover:bg-muted/50 transition-colors select-all"
+              onClick={(e) => copyToClipboard(e)}
+              onTouchStart={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              className="bg-background border border-border rounded-lg p-3 break-all text-xs text-foreground font-mono max-h-32 overflow-y-auto cursor-pointer hover:bg-muted/50 transition-colors select-all touch-manipulation"
               title="Clique para copiar"
             >
               {qrCode || 'Carregando código PIX...'}
@@ -188,8 +300,13 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
 
           {/* Botão copiar */}
           <button
-            onClick={copyToClipboard}
-            className="w-full h-12 bg-green-600 hover:bg-green-700 text-white rounded-full font-semibold mb-3 flex items-center justify-center gap-2 transition-colors"
+            type="button"
+            onClick={(e) => copyToClipboard(e)}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="w-full h-12 bg-green-600 hover:bg-green-700 text-white rounded-full font-semibold mb-3 flex items-center justify-center gap-2 transition-colors touch-manipulation"
           >
             {copied ? (
               <>
@@ -206,9 +323,18 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
 
           {/* Botão "Já paguei" */}
           <button
-            onClick={checkPaymentStatus}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              checkPaymentStatus();
+            }}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             disabled={isChecking}
-            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full font-semibold mb-4 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full font-semibold mb-4 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 touch-manipulation"
           >
             {isChecking ? (
               <>
