@@ -15,6 +15,19 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
   const [copied, setCopied] = useState(false);
   const [localPaymentStatus, setLocalPaymentStatus] = useState(paymentStatus || 'pending');
   const [isChecking, setIsChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Error boundary interno
+  useEffect(() => {
+    const errorHandler = (event: ErrorEvent) => {
+      console.error('Erro capturado no modal:', event.error);
+      setError('Ocorreu um erro. Por favor, tente novamente.');
+      event.preventDefault();
+    };
+
+    window.addEventListener('error', errorHandler);
+    return () => window.removeEventListener('error', errorHandler);
+  }, []);
 
   // Atualiza status local quando paymentStatus mudar
   useEffect(() => {
@@ -60,98 +73,214 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
     }
   };
 
-  const copyToClipboard = async (e?: React.MouseEvent | React.TouchEvent) => {
-    // Prevenir qualquer comportamento padrão ANTES de qualquer coisa
-    try {
-      if (e) {
-        if ('preventDefault' in e && typeof e.preventDefault === 'function') {
-          e.preventDefault();
-        }
-        if ('stopPropagation' in e && typeof e.stopPropagation === 'function') {
-          e.stopPropagation();
-        }
-        if ('nativeEvent' in e && e.nativeEvent && 'stopImmediatePropagation' in e.nativeEvent) {
-          e.nativeEvent.stopImmediatePropagation();
-        }
-      }
-    } catch (preventError) {
-      console.warn('Erro ao prevenir eventos:', preventError);
-    }
-    
-    if (!qrCode || qrCode.trim() === '') {
-      console.warn('Código PIX não disponível');
-      return;
-    }
-    
-    // Usar setTimeout para garantir que o evento seja processado antes da cópia
-    setTimeout(async () => {
+  const copyToClipboard = (e?: React.MouseEvent | React.TouchEvent) => {
+    // Prevenir TODOS os comportamentos padrão de forma agressiva
+    if (e) {
       try {
-        // Método 1: Tentar usar a API moderna do clipboard
-        if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
-          try {
-            await navigator.clipboard.writeText(qrCode);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-            return;
-          } catch (clipboardError) {
-            console.log('Clipboard API falhou, tentando fallback:', clipboardError);
-            // Continua para o fallback
-          }
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+        if (e.nativeEvent) {
+          e.nativeEvent.stopImmediatePropagation?.();
+          e.nativeEvent.preventDefault?.();
         }
-        
-        // Método 2: Fallback para dispositivos mais antigos ou quando clipboard API falha
-        const textArea = document.createElement('textarea');
-        textArea.value = qrCode;
-        textArea.style.position = 'fixed';
-        textArea.style.left = '-999999px';
-        textArea.style.top = '-999999px';
-        textArea.style.opacity = '0';
-        textArea.style.pointerEvents = 'none';
-        textArea.setAttribute('readonly', '');
-        textArea.setAttribute('contenteditable', 'true');
-        
-        document.body.appendChild(textArea);
-        
-        // Para iOS
-        if (navigator.userAgent.match(/ipad|iphone/i)) {
-          const range = document.createRange();
-          range.selectNodeContents(textArea);
-          const selection = window.getSelection();
-          if (selection) {
-            selection.removeAllRanges();
-            selection.addRange(range);
-          }
-          textArea.setSelectionRange(0, 999999);
-        } else {
-          textArea.focus();
-          textArea.select();
-        }
-        
+      } catch (err) {
+        // Ignorar erros de prevenção
+      }
+    }
+    
+    // Retornar false para garantir que nada aconteça
+    if (!qrCode || qrCode.trim() === '') {
+      return false;
+    }
+    
+    // Usar requestAnimationFrame para garantir que está fora do ciclo de eventos
+    requestAnimationFrame(() => {
+      try {
+        copyToClipboardInternal(qrCode);
+      } catch (error) {
+        console.error('Erro ao copiar:', error);
+      }
+    });
+    
+    return false;
+  };
+
+  const copyToClipboardInternal = (text: string) => {
+    try {
+      // Método 1: API moderna do clipboard (requer HTTPS ou localhost)
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }).catch(() => {
+          // Se falhar, tentar método 2
+          copyToClipboardFallback(text);
+        });
+        return;
+      }
+      
+      // Método 2: Fallback usando input (melhor para Android/Xiaomi)
+      copyToClipboardFallback(text);
+    } catch (error) {
+      console.error('Erro ao copiar:', error);
+      copyToClipboardFallback(text);
+    }
+  };
+
+  const copyToClipboardFallback = (text: string) => {
+    try {
+      // Usar textarea para textos longos (código PIX é longo)
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '0';
+      textArea.style.top = '0';
+      textArea.style.width = '2em';
+      textArea.style.height = '2em';
+      textArea.style.padding = '0';
+      textArea.style.border = 'none';
+      textArea.style.outline = 'none';
+      textArea.style.boxShadow = 'none';
+      textArea.style.background = 'transparent';
+      textArea.style.opacity = '0';
+      textArea.style.pointerEvents = 'none';
+      textArea.setAttribute('readonly', 'readonly');
+      textArea.setAttribute('aria-hidden', 'true');
+      textArea.setAttribute('tabindex', '-1');
+      
+      document.body.appendChild(textArea);
+      
+      // Pequeno delay para garantir que o elemento está no DOM
+      setTimeout(() => {
         try {
-          const successful = document.execCommand('copy');
-          if (successful) {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+          // Selecionar o texto
+          const isAndroid = /android|xiaomi/i.test(navigator.userAgent);
+          const isIOS = /ipad|iphone/i.test(navigator.userAgent);
+          
+          if (isAndroid) {
+            // Para Android/Xiaomi - método mais confiável
+            textArea.focus();
+            textArea.select();
+            // Tentar setSelectionRange também
+            try {
+              textArea.setSelectionRange(0, text.length);
+            } catch (e) {
+              // Ignorar se não suportar
+            }
+          } else if (isIOS) {
+            // Para iOS
+            const range = document.createRange();
+            range.selectNodeContents(textArea);
+            const selection = window.getSelection();
+            if (selection) {
+              selection.removeAllRanges();
+              selection.addRange(range);
+            }
+            try {
+              textArea.setSelectionRange(0, text.length);
+            } catch (e) {
+              // Ignorar
+            }
           } else {
-            console.warn('execCommand copy retornou false');
+            // Para outros dispositivos
+            textArea.focus();
+            textArea.select();
           }
-        } catch (err) {
-          console.error('Erro ao copiar com execCommand:', err);
-        } finally {
-          // Sempre remover o textArea
+          
+          // Pequeno delay antes de copiar
+          setTimeout(() => {
+            try {
+              // Tentar copiar
+              const successful = document.execCommand('copy');
+              
+              if (successful) {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              } else {
+                // Se falhar, tentar novamente com foco
+                textArea.focus();
+                textArea.select();
+                const retry = document.execCommand('copy');
+                if (retry) {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }
+              }
+            } catch (copyError) {
+              console.error('Erro ao executar copy:', copyError);
+            } finally {
+              // Sempre remover o textArea
+              try {
+                if (textArea.parentNode) {
+                  document.body.removeChild(textArea);
+                }
+              } catch (removeError) {
+                // Ignorar erro de remoção
+              }
+            }
+          }, 10);
+        } catch (selectError) {
+          console.error('Erro ao selecionar texto:', selectError);
+          // Tentar remover mesmo em caso de erro
           try {
             if (textArea.parentNode) {
               document.body.removeChild(textArea);
             }
-          } catch (removeError) {
-            console.warn('Erro ao remover textArea:', removeError);
+          } catch (e) {
+            // Ignorar
           }
         }
-      } catch (error) {
-        console.error('Erro geral ao copiar para clipboard:', error);
-      }
-    }, 0);
+      }, 10);
+    } catch (error) {
+      console.error('Erro no fallback de cópia:', error);
+    }
   };
+
+  // Se houver erro, mostrar mensagem de erro
+  if (error) {
+    return (
+      <div 
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            e.stopPropagation();
+            setError(null);
+          }
+        }}
+        style={{ touchAction: 'manipulation' }}
+      >
+        <div 
+          className="bg-background rounded-2xl max-w-md w-full p-6 relative my-8"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <div className="text-center py-8">
+            <h2 className="text-2xl font-bold text-foreground mb-4">
+              Erro
+            </h2>
+            <p className="text-muted-foreground mb-6">
+              {error}
+            </p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setError(null);
+              }}
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full font-semibold transition-colors touch-manipulation"
+            >
+              Tentar Novamente
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Se o pagamento foi confirmado, mostrar mensagem de sucesso
   if (localPaymentStatus === 'paid') {
@@ -177,18 +306,26 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation?.();
           }}
           onTouchStart={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation?.();
           }}
           onTouchEnd={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation?.();
+          }}
+          onTouchCancel={(e) => {
             e.preventDefault();
             e.stopPropagation();
           }}
           onMouseDown={(e) => {
             e.stopPropagation();
           }}
+          style={{ touchAction: 'manipulation' }}
         >
           <button
             type="button"
@@ -254,6 +391,7 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
         if (e.target === e.currentTarget) {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation?.();
           onClose();
         }
       }}
@@ -261,26 +399,42 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
         if (e.target === e.currentTarget) {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation?.();
         }
       }}
+      onTouchEnd={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+      style={{ touchAction: 'manipulation' }}
     >
       <div 
         className="bg-background rounded-2xl max-w-md w-full p-6 relative my-8"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation?.();
         }}
         onTouchStart={(e) => {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation?.();
         }}
         onTouchEnd={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation?.();
+        }}
+        onTouchCancel={(e) => {
           e.preventDefault();
           e.stopPropagation();
         }}
         onMouseDown={(e) => {
           e.stopPropagation();
         }}
+        style={{ touchAction: 'manipulation' }}
       >
         <button
           type="button"
@@ -355,21 +509,36 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation?.();
                 copyToClipboard(e);
+                return false;
               }}
               onTouchStart={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation?.();
               }}
               onTouchEnd={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                e.stopImmediatePropagation?.();
                 copyToClipboard(e);
+                return false;
+              }}
+              onTouchCancel={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
               }}
               onMouseDown={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
               }}
               className="bg-background border border-border rounded-lg p-3 break-all text-xs text-foreground font-mono max-h-32 overflow-y-auto cursor-pointer hover:bg-muted/50 transition-colors select-all touch-manipulation"
+              style={{ userSelect: 'all', WebkitUserSelect: 'all' }}
               title="Clique para copiar"
               role="button"
               tabIndex={0}
@@ -391,21 +560,36 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              e.stopImmediatePropagation?.();
               copyToClipboard(e);
+              return false;
             }}
             onTouchStart={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              e.stopImmediatePropagation?.();
             }}
             onTouchEnd={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              e.stopImmediatePropagation?.();
               copyToClipboard(e);
+              return false;
+            }}
+            onTouchCancel={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
             }}
             onMouseDown={(e) => {
               e.preventDefault();
+              e.stopPropagation();
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
             }}
             className="w-full h-12 bg-green-600 hover:bg-green-700 text-white rounded-full font-semibold mb-3 flex items-center justify-center gap-2 transition-colors touch-manipulation"
+            style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
           >
             {copied ? (
               <>
