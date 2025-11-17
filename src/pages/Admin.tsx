@@ -15,7 +15,6 @@ import { FieldsConfigTab } from "@/components/admin/FieldsConfigTab";
 import { SecurityTab } from "@/components/admin/SecurityTab";
 import { PaymentTab } from "@/components/admin/PaymentTab";
 import { ChatBot } from "@/components/admin/ChatBot";
-import { NetflixLoader } from "@/components/admin/NetflixLoader";
 
 interface Transaction {
   id: string;
@@ -42,7 +41,6 @@ const Admin = () => {
   const [facebookToken, setFacebookToken] = useState("EAAQmsFtPWZA4BP9ZALSFn9BrwBtrxW9tGpJz6ZBkPJXpswI0eS9BAoYm5kyhEm5PHiNZA5bSudEF7BACGnrnUruhc7YNOqrEfHxneWJYb6CF1ZAc1oqzwPvo5m6jHrZAXTZC9CeOXV5S4rVXcekylZCEuoDetyyfEjRuGwmeQZCQiZCvcEdh8VXFSZA7gcTVyuMZBw1qWwZDZD");
   const [pixelOnCheckout, setPixelOnCheckout] = useState(true);
   const [pixelOnPurchase, setPixelOnPurchase] = useState(true);
-  const [showNetflixLoader, setShowNetflixLoader] = useState(false);
   const [isLoading, setIsLoading] = useState(() => {
     // Se não está logado, não precisa carregar
     const saved = localStorage.getItem('admin_logged_in');
@@ -288,27 +286,21 @@ const Admin = () => {
 
   const handleLogin = () => {
     if (username === "venom" && password === "venom198") {
-      // Mostrar animação Netflix
-      setShowNetflixLoader(true);
+      setIsLoggedIn(true);
+      // Salvar sessão no localStorage
+      localStorage.setItem('admin_logged_in', 'true');
+      // Limpar campos
+      setUsername("");
+      setPassword("");
+      toast({
+        description: "Login realizado",
+      });
     } else {
       toast({
         description: "Credenciais inválidas",
         variant: "destructive",
       });
     }
-  };
-
-  const handleLoginComplete = () => {
-    setIsLoggedIn(true);
-    // Salvar sessão no localStorage
-    localStorage.setItem('admin_logged_in', 'true');
-    // Limpar campos
-    setUsername("");
-    setPassword("");
-    setShowNetflixLoader(false);
-    toast({
-      description: "Login realizado",
-    });
   };
 
   const handleLogout = () => {
@@ -736,10 +728,6 @@ const Admin = () => {
       });
     }
   };
-
-  if (showNetflixLoader) {
-    return <NetflixLoader onComplete={handleLoginComplete} />;
-  }
 
   if (!isLoggedIn) {
     return (
