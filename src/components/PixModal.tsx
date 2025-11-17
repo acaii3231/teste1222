@@ -11,11 +11,88 @@ interface PixModalProps {
   pixId?: string;
 }
 
+// Detecção completa de dispositivos e navegadores
+interface DeviceInfo {
+  isMobile: boolean;
+  isIOS: boolean;
+  isAndroid: boolean;
+  isXiaomi: boolean;
+  isSamsung: boolean;
+  isChrome: boolean;
+  isSafari: boolean;
+  isFirefox: boolean;
+  isEdge: boolean;
+  isOpera: boolean;
+  supportsClipboardAPI: boolean;
+  supportsExecCommand: boolean;
+}
+
+const detectDevice = (): DeviceInfo => {
+  const ua = navigator.userAgent.toLowerCase();
+  
+  // Detecção de mobile - múltiplos métodos
+  const hasMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i.test(ua);
+  const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const isSmallScreen = window.innerWidth <= 768;
+  const isMobile = hasMobileUA || (hasTouchScreen && isSmallScreen);
+  
+  // Detecção de plataformas
+  const isIOS = /iphone|ipad|ipod/i.test(ua);
+  const isAndroid = /android/i.test(ua);
+  
+  // Detecção de marcas Android
+  const isXiaomi = /xiaomi|redmi|mi\s|poco|redmi/i.test(ua);
+  const isSamsung = /samsung|galaxy|sm-|gt-|sgh-/i.test(ua);
+  
+  // Detecção de navegadores
+  const isChrome = /chrome/i.test(ua) && !/edg|opr|safari/i.test(ua);
+  const isSafari = /safari/i.test(ua) && !/chrome|edg|opr/i.test(ua);
+  const isFirefox = /firefox|fxios/i.test(ua);
+  const isEdge = /edg/i.test(ua);
+  const isOpera = /opr|opera/i.test(ua);
+  
+  // Verificar suporte de APIs
+  const supportsClipboardAPI = !!(navigator.clipboard && navigator.clipboard.writeText);
+  const supportsExecCommand = !!document.execCommand;
+  
+  return {
+    isMobile,
+    isIOS,
+    isAndroid,
+    isXiaomi,
+    isSamsung,
+    isChrome,
+    isSafari,
+    isFirefox,
+    isEdge,
+    isOpera,
+    supportsClipboardAPI,
+    supportsExecCommand,
+  };
+};
+
 export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheckingPayment = true, pixId }: PixModalProps) => {
   const [copied, setCopied] = useState(false);
   const [localPaymentStatus, setLocalPaymentStatus] = useState(paymentStatus || 'pending');
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+
+  // Detectar dispositivo ao montar
+  useEffect(() => {
+    const device = detectDevice();
+    setDeviceInfo(device);
+    // Log para debug (apenas em desenvolvimento)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Dispositivo detectado:', {
+        dispositivo: device.isXiaomi ? 'Xiaomi' : device.isSamsung ? 'Samsung' : device.isIOS ? 'iOS' : device.isAndroid ? 'Android' : 'Outro',
+        navegador: device.isChrome ? 'Chrome' : device.isSafari ? 'Safari' : device.isFirefox ? 'Firefox' : device.isEdge ? 'Edge' : 'Outro',
+        mobile: device.isMobile,
+        clipboardAPI: device.supportsClipboardAPI,
+        execCommand: device.supportsExecCommand,
+      });
+    }
+  }, []);
 
   // Error boundary interno
   useEffect(() => {
@@ -100,6 +177,7 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
         copyToClipboardInternal(qrCode);
       } catch (error) {
         console.error('Erro ao copiar:', error);
+        copyToClipboardFallback(qrCode);
       }
     });
     
@@ -107,20 +185,23 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
   };
 
   const copyToClipboardInternal = (text: string) => {
+    const device = deviceInfo || detectDevice();
+    
     try {
-      // Método 1: API moderna do clipboard (requer HTTPS ou localhost)
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+      // Método 1: API moderna do clipboard (melhor para Chrome, Edge, Firefox moderno)
+      if (device.supportsClipboardAPI && (device.isChrome || device.isEdge || device.isFirefox || window.isSecureContext)) {
         navigator.clipboard.writeText(text).then(() => {
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
-        }).catch(() => {
+        }).catch((err) => {
+          console.log('Clipboard API falhou, usando fallback:', err);
           // Se falhar, tentar método 2
           copyToClipboardFallback(text);
         });
         return;
       }
       
-      // Método 2: Fallback usando input (melhor para Android/Xiaomi)
+      // Método 2: Fallback para todos os outros casos
       copyToClipboardFallback(text);
     } catch (error) {
       console.error('Erro ao copiar:', error);
@@ -129,15 +210,37 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
   };
 
   const copyToClipboardFallback = (text: string) => {
+    const device = deviceInfo || detectDevice();
+    
     try {
       // Usar textarea para textos longos (código PIX é longo)
       const textArea = document.createElement('textarea');
       textArea.value = text;
-      textArea.style.position = 'fixed';
-      textArea.style.left = '0';
-      textArea.style.top = '0';
-      textArea.style.width = '2em';
-      textArea.style.height = '2em';
+      
+      // Estilos otimizados para diferentes dispositivos
+      if (device.isIOS) {
+        // iOS precisa de posição específica
+        textArea.style.position = 'absolute';
+        textArea.style.left = '0';
+        textArea.style.top = '0';
+        textArea.style.width = '1px';
+        textArea.style.height = '1px';
+      } else if (device.isXiaomi || device.isSamsung) {
+        // Xiaomi/Samsung - posição fixa funciona melhor
+        textArea.style.position = 'fixed';
+        textArea.style.left = '0';
+        textArea.style.top = '0';
+        textArea.style.width = '2em';
+        textArea.style.height = '2em';
+      } else {
+        // Outros dispositivos
+        textArea.style.position = 'fixed';
+        textArea.style.left = '0';
+        textArea.style.top = '0';
+        textArea.style.width = '2em';
+        textArea.style.height = '2em';
+      }
+      
       textArea.style.padding = '0';
       textArea.style.border = 'none';
       textArea.style.outline = 'none';
@@ -145,31 +248,36 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
       textArea.style.background = 'transparent';
       textArea.style.opacity = '0';
       textArea.style.pointerEvents = 'none';
+      textArea.style.zIndex = '-9999';
       textArea.setAttribute('readonly', 'readonly');
       textArea.setAttribute('aria-hidden', 'true');
       textArea.setAttribute('tabindex', '-1');
       
       document.body.appendChild(textArea);
       
-      // Pequeno delay para garantir que o elemento está no DOM
+      // Delay baseado no dispositivo
+      const delay = device.isXiaomi ? 50 : device.isIOS ? 30 : 10;
+      
       setTimeout(() => {
         try {
-          // Selecionar o texto
-          const isAndroid = /android|xiaomi/i.test(navigator.userAgent);
-          const isIOS = /ipad|iphone/i.test(navigator.userAgent);
-          
-          if (isAndroid) {
-            // Para Android/Xiaomi - método mais confiável
+          // Métodos de seleção específicos por dispositivo
+          if (device.isXiaomi) {
+            // Xiaomi - método mais robusto
             textArea.focus();
             textArea.select();
-            // Tentar setSelectionRange também
-            try {
+            // Múltiplas tentativas
+            setTimeout(() => {
               textArea.setSelectionRange(0, text.length);
-            } catch (e) {
-              // Ignorar se não suportar
-            }
-          } else if (isIOS) {
-            // Para iOS
+              tryCopy(textArea, text);
+            }, 20);
+          } else if (device.isSamsung) {
+            // Samsung
+            textArea.focus();
+            textArea.select();
+            textArea.setSelectionRange(0, text.length);
+            tryCopy(textArea, text);
+          } else if (device.isIOS) {
+            // iOS - usar Selection API
             const range = document.createRange();
             range.selectNodeContents(textArea);
             const selection = window.getSelection();
@@ -177,64 +285,82 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
               selection.removeAllRanges();
               selection.addRange(range);
             }
+            textArea.setSelectionRange(0, text.length);
+            tryCopy(textArea, text);
+          } else if (device.isAndroid) {
+            // Android genérico
+            textArea.focus();
+            textArea.select();
             try {
               textArea.setSelectionRange(0, text.length);
             } catch (e) {
-              // Ignorar
+              // Ignorar se não suportar
             }
+            tryCopy(textArea, text);
           } else {
-            // Para outros dispositivos
+            // Desktop ou outros
             textArea.focus();
             textArea.select();
+            tryCopy(textArea, text);
           }
-          
-          // Pequeno delay antes de copiar
-          setTimeout(() => {
-            try {
-              // Tentar copiar
-              const successful = document.execCommand('copy');
-              
-              if (successful) {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              } else {
-                // Se falhar, tentar novamente com foco
-                textArea.focus();
-                textArea.select();
-                const retry = document.execCommand('copy');
-                if (retry) {
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }
-              }
-            } catch (copyError) {
-              console.error('Erro ao executar copy:', copyError);
-            } finally {
-              // Sempre remover o textArea
-              try {
-                if (textArea.parentNode) {
-                  document.body.removeChild(textArea);
-                }
-              } catch (removeError) {
-                // Ignorar erro de remoção
-              }
-            }
-          }, 10);
         } catch (selectError) {
           console.error('Erro ao selecionar texto:', selectError);
           // Tentar remover mesmo em caso de erro
-          try {
-            if (textArea.parentNode) {
-              document.body.removeChild(textArea);
-            }
-          } catch (e) {
-            // Ignorar
-          }
+          cleanup(textArea);
         }
-      }, 10);
+      }, delay);
     } catch (error) {
       console.error('Erro no fallback de cópia:', error);
     }
+  };
+
+  const tryCopy = (element: HTMLTextAreaElement, text: string, retries = 2) => {
+    try {
+      const successful = document.execCommand('copy');
+      
+      if (successful) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        cleanup(element);
+      } else if (retries > 0) {
+        // Retry com foco novamente
+        setTimeout(() => {
+          element.focus();
+          element.select();
+          element.setSelectionRange(0, text.length);
+          tryCopy(element, text, retries - 1);
+        }, 20);
+      } else {
+        // Última tentativa
+        element.focus();
+        element.select();
+        const finalAttempt = document.execCommand('copy');
+        if (finalAttempt) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }
+        cleanup(element);
+      }
+    } catch (copyError) {
+      console.error('Erro ao executar copy:', copyError);
+      if (retries > 0) {
+        setTimeout(() => tryCopy(element, text, retries - 1), 20);
+      } else {
+        cleanup(element);
+      }
+    }
+  };
+
+  const cleanup = (element: HTMLTextAreaElement) => {
+    setTimeout(() => {
+      try {
+        if (element && element.parentNode) {
+          document.body.removeChild(element);
+        }
+      } catch (removeError) {
+        // Ignorar erro de remoção
+      }
+    }, 100);
   };
 
   // Se houver erro, mostrar mensagem de erro
