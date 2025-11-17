@@ -27,9 +27,9 @@ export const supabase = createClient<Database>(
   }
 );
 
-// Testar conexão ao inicializar
+// Testar conexão ao inicializar (com delay para evitar problemas de inicialização)
 if (typeof window !== 'undefined') {
-  (async () => {
+  setTimeout(async () => {
     try {
       const { error } = await supabase.from('transactions').select('count').limit(1);
       if (error) {
@@ -42,5 +42,5 @@ if (typeof window !== 'undefined') {
     } catch (err) {
       console.error('❌ Erro ao testar conexão Supabase:', err);
     }
-  })();
+  }, 200);
 }
