@@ -815,6 +815,20 @@ const Checkout = () => {
                    }`}>
                      R$ {mainProductPrice.toFixed(2).replace('.', ',')}
                    </p>
+                  {/* Botão Pagar com PIX no produto principal */}
+                  <div className="w-full pt-2">
+                    <CheckoutButton 
+                      onClick={handlePayment} 
+                      loading={loading} 
+                      className={checkoutTheme === 'conversion' 
+                        ? 'bg-white hover:bg-white/90 text-orange-600' 
+                        : themeClasses.button}
+                      animate={checkoutTheme === 'blackwhite'}
+                      pulseDuration={pulseDuration}
+                    >
+                      Pagar com PIX
+                    </CheckoutButton>
+                  </div>
                 </div>
               </div>
 
