@@ -60,49 +60,97 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
     }
   };
 
-  const copyToClipboard = async (e?: React.MouseEvent) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
+  const copyToClipboard = async (e?: React.MouseEvent | React.TouchEvent) => {
+    // Prevenir qualquer comportamento padrão ANTES de qualquer coisa
+    try {
+      if (e) {
+        if ('preventDefault' in e && typeof e.preventDefault === 'function') {
+          e.preventDefault();
+        }
+        if ('stopPropagation' in e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation();
+        }
+        if ('nativeEvent' in e && e.nativeEvent && 'stopImmediatePropagation' in e.nativeEvent) {
+          e.nativeEvent.stopImmediatePropagation();
+        }
+      }
+    } catch (preventError) {
+      console.warn('Erro ao prevenir eventos:', preventError);
     }
     
-    if (!qrCode) {
-      alert('Código PIX ainda não está disponível');
+    if (!qrCode || qrCode.trim() === '') {
+      console.warn('Código PIX não disponível');
       return;
     }
     
-    try {
-      // Tenta usar a API moderna do clipboard
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(qrCode);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } else {
-        // Fallback para dispositivos mais antigos
+    // Usar setTimeout para garantir que o evento seja processado antes da cópia
+    setTimeout(async () => {
+      try {
+        // Método 1: Tentar usar a API moderna do clipboard
+        if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+          try {
+            await navigator.clipboard.writeText(qrCode);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+            return;
+          } catch (clipboardError) {
+            console.log('Clipboard API falhou, tentando fallback:', clipboardError);
+            // Continua para o fallback
+          }
+        }
+        
+        // Método 2: Fallback para dispositivos mais antigos ou quando clipboard API falha
         const textArea = document.createElement('textarea');
         textArea.value = qrCode;
         textArea.style.position = 'fixed';
         textArea.style.left = '-999999px';
         textArea.style.top = '-999999px';
+        textArea.style.opacity = '0';
+        textArea.style.pointerEvents = 'none';
+        textArea.setAttribute('readonly', '');
+        textArea.setAttribute('contenteditable', 'true');
+        
         document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
+        
+        // Para iOS
+        if (navigator.userAgent.match(/ipad|iphone/i)) {
+          const range = document.createRange();
+          range.selectNodeContents(textArea);
+          const selection = window.getSelection();
+          if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+          textArea.setSelectionRange(0, 999999);
+        } else {
+          textArea.focus();
+          textArea.select();
+        }
         
         try {
-          document.execCommand('copy');
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
+          const successful = document.execCommand('copy');
+          if (successful) {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          } else {
+            console.warn('execCommand copy retornou false');
+          }
         } catch (err) {
-          console.error('Erro ao copiar:', err);
-          alert('Não foi possível copiar. Por favor, selecione e copie manualmente.');
+          console.error('Erro ao copiar com execCommand:', err);
         } finally {
-          document.body.removeChild(textArea);
+          // Sempre remover o textArea
+          try {
+            if (textArea.parentNode) {
+              document.body.removeChild(textArea);
+            }
+          } catch (removeError) {
+            console.warn('Erro ao remover textArea:', removeError);
+          }
         }
+      } catch (error) {
+        console.error('Erro geral ao copiar para clipboard:', error);
       }
-    } catch (error) {
-      console.error('Erro ao copiar para clipboard:', error);
-      alert('Não foi possível copiar. Por favor, selecione e copie manualmente.');
-    }
+    }, 0);
   };
 
   // Se o pagamento foi confirmado, mostrar mensagem de sucesso
@@ -127,9 +175,18 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
         <div 
           className="bg-background rounded-2xl max-w-md w-full p-6 relative my-8"
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
           }}
           onTouchStart={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onMouseDown={(e) => {
             e.stopPropagation();
           }}
         >
@@ -210,9 +267,18 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
       <div 
         className="bg-background rounded-2xl max-w-md w-full p-6 relative my-8"
         onClick={(e) => {
+          e.preventDefault();
           e.stopPropagation();
         }}
         onTouchStart={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onMouseDown={(e) => {
           e.stopPropagation();
         }}
       >
@@ -286,13 +352,34 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
           <div className="bg-muted/20 rounded-xl p-4 mb-4">
             <p className="text-xs text-muted-foreground mb-2 font-medium text-center">COPIAR CÓDIGO:</p>
             <div 
-              onClick={(e) => copyToClipboard(e)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                copyToClipboard(e);
+              }}
               onTouchStart={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
               }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                copyToClipboard(e);
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+              }}
               className="bg-background border border-border rounded-lg p-3 break-all text-xs text-foreground font-mono max-h-32 overflow-y-auto cursor-pointer hover:bg-muted/50 transition-colors select-all touch-manipulation"
               title="Clique para copiar"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  copyToClipboard();
+                }
+              }}
             >
               {qrCode || 'Carregando código PIX...'}
             </div>
@@ -301,10 +388,22 @@ export const PixModal = ({ qrCodeBase64, qrCode, onClose, paymentStatus, isCheck
           {/* Botão copiar */}
           <button
             type="button"
-            onClick={(e) => copyToClipboard(e)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              copyToClipboard(e);
+            }}
             onTouchStart={(e) => {
               e.preventDefault();
               e.stopPropagation();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              copyToClipboard(e);
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
             }}
             className="w-full h-12 bg-green-600 hover:bg-green-700 text-white rounded-full font-semibold mb-3 flex items-center justify-center gap-2 transition-colors touch-manipulation"
           >
