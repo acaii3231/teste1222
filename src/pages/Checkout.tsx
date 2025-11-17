@@ -225,6 +225,45 @@ const Checkout = () => {
   }, [pixData?.pixId, selectedUpsells, upsells, mainProductPrice, pixelOnPurchase, purchaseTracked]);
 
 
+  // Load site info (title and favicon) from database
+  useEffect(() => {
+    const loadSiteInfo = async () => {
+      try {
+        // Carregar título
+        const { data: titleData } = await supabase
+          .from('site_config' as any)
+          .select('value')
+          .eq('key', 'site_title')
+          .maybeSingle();
+        
+        if (titleData && (titleData as any).value) {
+          document.title = (titleData as any).value;
+        }
+
+        // Carregar favicon
+        const { data: faviconData } = await supabase
+          .from('site_config' as any)
+          .select('value')
+          .eq('key', 'favicon_url')
+          .maybeSingle();
+        
+        if (faviconData && (faviconData as any).value) {
+          let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+          if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            document.head.appendChild(link);
+          }
+          link.href = (faviconData as any).value;
+        }
+      } catch (error) {
+        // Ignorar erros silenciosamente
+      }
+    };
+
+    loadSiteInfo();
+  }, []);
+
   // Load upsell config from database
   useEffect(() => {
     const loadUpsellConfig = async () => {
