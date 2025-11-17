@@ -47,13 +47,20 @@ export function DashboardTab({ stats, transactions, onClearMetrics, onRefresh, o
         .order('created_at', { ascending: false })
         .limit(10);
       
-      if (error) throw error;
+      // Se a tabela não existir (404), apenas ignorar silenciosamente
+      if (error && error.code !== 'PGRST116') {
+        // PGRST116 = tabela não encontrada, ignorar
+        return;
+      }
       
       if (data) {
         setBackups(data);
       }
-    } catch (error) {
-      console.error('Erro ao carregar backups:', error);
+    } catch (error: any) {
+      // Ignorar erros de tabela não encontrada
+      if (error?.code === 'PGRST116' || error?.message?.includes('404')) {
+        return;
+      }
     }
   };
 

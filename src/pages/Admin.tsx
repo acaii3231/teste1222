@@ -82,57 +82,45 @@ const Admin = () => {
   // Função para carregar configurações do pixel
   const loadPixelConfig = async () => {
     try {
-      console.log('🔄 Carregando configurações do pixel...');
       const { data, error } = await supabase
         .from('site_config' as any)
         .select('*')
         .in('key', ['facebook_pixel_id', 'facebook_token', 'pixel_on_checkout', 'pixel_on_purchase']);
       
-      if (error) {
-        console.error('❌ Erro ao carregar pixel config:', error);
-        return;
-      }
+      if (error) return;
       
       if (data && data.length > 0) {
-        console.log('✅ Configurações do pixel carregadas');
         (data as any[]).forEach((config: any) => {
           if (config.key === 'facebook_pixel_id') setFacebookPixelId(config.value);
           if (config.key === 'facebook_token') setFacebookToken(config.value);
           if (config.key === 'pixel_on_checkout') setPixelOnCheckout(config.value === 'true');
           if (config.key === 'pixel_on_purchase') setPixelOnPurchase(config.value === 'true');
         });
-      } else {
-        console.log('ℹ️ Nenhuma configuração de pixel encontrada, usando valores padrão');
       }
     } catch (error) {
-      console.error('❌ Erro inesperado em loadPixelConfig:', error);
+      // Ignorar erros silenciosamente
     }
   };
   
   // Função para carregar upsells
   const loadUpsellConfig = async () => {
     try {
-      console.log('🔄 Carregando upsells...');
       const { data, error } = await supabase
         .from('upsell_config' as any)
         .select('*')
         .order('order', { ascending: true });
       
       if (error) {
-        console.error('❌ Erro ao carregar upsells:', error);
         setUpsells([]);
         return;
       }
       
       if (data) {
-        console.log('✅ Upsells carregados:', data.length);
         setUpsells(data as Upsell[]);
       } else {
-        console.log('ℹ️ Nenhum upsell encontrado');
         setUpsells([]);
       }
     } catch (error) {
-      console.error('❌ Erro inesperado em loadUpsellConfig:', error);
       setUpsells([]);
     }
   };
@@ -140,27 +128,18 @@ const Admin = () => {
   // Load transactions from database
   const loadTransactions = async () => {
     try {
-      console.log('🔄 Carregando transações...');
       const { data, error } = await supabase
         .from('transactions' as any)
         .select('*')
         .order('created_at', { ascending: false });
       
       if (error) {
-        console.error('❌ Erro ao carregar transações:', error);
-        console.error('Detalhes do erro:', {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        });
         setLoadError(`Erro ao carregar transações: ${error.message || 'Erro desconhecido'}. Verifique a conexão com o Supabase.`);
-        setTransactions([]); // Limpar transações em caso de erro
+        setTransactions([]);
         return;
       }
     
       if (data) {
-        console.log('✅ Transações carregadas:', data.length);
         const formattedTransactions: Transaction[] = (data as any[]).map((t: any) => ({
           id: t.id,
           name: t.name || 'Não informado',
@@ -175,7 +154,7 @@ const Admin = () => {
         }));
         
         setTransactions(formattedTransactions);
-        setLoadError(null); // Limpar erro se carregou com sucesso
+        setLoadError(null);
         
         // Calculate dashboard stats
         const totalSales = (data as any[]).length;
@@ -196,11 +175,9 @@ const Admin = () => {
           upsellConversion: totalSales > 0 ? (ordersWithUpsell / totalSales) * 100 : 0,
         });
       } else {
-        console.log('ℹ️ Nenhuma transação encontrada');
         setTransactions([]);
       }
     } catch (error: any) {
-      console.error('❌ Erro inesperado em loadTransactions:', error);
       setLoadError(`Erro inesperado: ${error.message || 'Erro desconhecido'}. Tente atualizar a página.`);
       setTransactions([]);
     }
@@ -217,27 +194,16 @@ const Admin = () => {
     
     const loadAllData = async () => {
       try {
-        console.log('🚀 Iniciando carregamento de todos os dados...');
         // Carregar em paralelo, mas com tratamento individual de erros
-        const results = await Promise.allSettled([
+        await Promise.allSettled([
           loadTransactions(),
           loadUpsellConfig(),
           loadPixelConfig()
         ]);
-        
-        // Verificar se algum falhou
-        const failures = results.filter(r => r.status === 'rejected');
-        if (failures.length > 0) {
-          console.warn('⚠️ Alguns dados não foram carregados:', failures);
-        }
-        
-        console.log('✅ Carregamento de dados concluído');
       } catch (error) {
-        console.error('❌ Erro crítico ao carregar dados:', error);
         setLoadError('Erro crítico ao carregar dados. Verifique a conexão com o Supabase e tente atualizar a página.');
       } finally {
         setIsLoading(false);
-        console.log('🏁 Estado de loading finalizado');
       }
     };
 
@@ -254,7 +220,6 @@ const Admin = () => {
           table: 'transactions'
         },
         () => {
-          console.log('Transação atualizada em tempo real');
           loadTransactions();
         }
       )
@@ -271,7 +236,6 @@ const Admin = () => {
           table: 'upsell_config'
         },
         () => {
-          console.log('Upsell atualizado em tempo real');
           loadUpsellConfig();
         }
       )
@@ -492,7 +456,6 @@ const Admin = () => {
         } as any);
 
       if (backupError) {
-        console.error('Erro ao criar backup:', backupError);
         toast({
           description: "Erro ao criar backup, mas continuando...",
           variant: "destructive",
@@ -504,15 +467,12 @@ const Admin = () => {
       }
 
       // 2. Deletar todas as transações - MÚLTIPLAS ABORDAGENS
-      console.log('🗑️  Iniciando limpeza de transações...');
-      
       try {
         // ABORDAGEM 1: Tentar usar função RPC (mais rápida)
         const { data: rpcResult, error: rpcError } = await supabase
           .rpc('delete_all_transactions' as any);
         
         if (!rpcError && rpcResult !== null && rpcResult !== undefined) {
-          console.log(`✅ Função RPC executada: ${rpcResult} transações deletadas`);
           await loadTransactions();
           toast({
             description: `${rpcResult} transações deletadas com sucesso!`,
@@ -520,20 +480,16 @@ const Admin = () => {
           return;
         }
         
-        console.log('⚠️  Função RPC não disponível, usando método alternativo...');
-        
         // ABORDAGEM 2: Buscar todos os IDs e deletar
         const { data: allTransactions, error: fetchError } = await supabase
           .from('transactions' as any)
           .select('id');
         
         if (fetchError) {
-          console.error('❌ Erro ao buscar transações:', fetchError);
           throw fetchError;
         }
 
         if (!allTransactions || allTransactions.length === 0) {
-          console.log('ℹ️  Nenhuma transação para deletar');
           toast({
             description: "Nenhuma transação encontrada",
           });
@@ -542,7 +498,6 @@ const Admin = () => {
         }
 
         const ids = allTransactions.map((t: any) => t.id);
-        console.log(`📊 Total de transações a deletar: ${ids.length}`);
         
         // ABORDAGEM 3: Deletar usando .in() com todos os IDs de uma vez
         const { error: deleteAllError } = await supabase
@@ -551,15 +506,12 @@ const Admin = () => {
           .in('id', ids);
         
         if (!deleteAllError) {
-          console.log(`✅ Todas as ${ids.length} transações deletadas de uma vez!`);
           await loadTransactions();
           toast({
             description: `${ids.length} transações deletadas com sucesso!`,
           });
           return;
         }
-        
-        console.log('⚠️  Deletar todas de uma vez falhou, tentando em lotes menores...');
         
         // ABORDAGEM 4: Deletar em lotes pequenos (5 por vez)
         let deletedCount = 0;
@@ -574,7 +526,6 @@ const Admin = () => {
             .in('id', batch);
           
           if (batchError) {
-            console.error(`❌ Erro no lote ${Math.floor(i/5) + 1}:`, batchError);
             // Tentar deletar uma por uma neste lote
             for (const id of batch) {
               const { error: singleError } = await supabase
@@ -583,7 +534,6 @@ const Admin = () => {
                 .eq('id', id);
               
               if (singleError) {
-                console.error(`❌ Erro ao deletar ID ${id}:`, singleError);
                 errorCount++;
               } else {
                 deletedCount++;
@@ -592,11 +542,7 @@ const Admin = () => {
           } else {
             deletedCount += batch.length;
           }
-          
-          console.log(`✅ Progresso: ${Math.min(i + 5, ids.length)}/${ids.length} processadas`);
         }
-        
-        console.log(`✅ Processo concluído: ${deletedCount} deletadas, ${errorCount} erros`);
         
         if (errorCount > 0 && deletedCount === 0) {
           toast({
@@ -617,9 +563,8 @@ const Admin = () => {
           });
         }
       } catch (error: any) {
-        console.error('❌ Erro geral ao limpar:', error);
         toast({
-          description: `Erro: ${error.message || 'Erro desconhecido'}. Verifique o console.`,
+          description: `Erro: ${error.message || 'Erro desconhecido'}.`,
           variant: "destructive",
         });
         return;
@@ -632,7 +577,6 @@ const Admin = () => {
         description: "Métricas e transações limpas com sucesso!",
       });
     } catch (error: any) {
-      console.error('Erro ao limpar métricas:', error);
       toast({
         description: error.message || "Erro ao limpar métricas",
         variant: "destructive",
@@ -721,7 +665,6 @@ const Admin = () => {
         description: `Backup restaurado! ${backupData.transactions.length} transações recuperadas.`,
       });
     } catch (error: any) {
-      console.error('Erro ao restaurar backup:', error);
       toast({
         description: error.message || "Erro ao restaurar backup",
         variant: "destructive",
