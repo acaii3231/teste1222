@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabaseClient as supabase } from "@/lib/supabase-helpers";
-import { ImageIcon, Shield, Smartphone, Globe } from "lucide-react";
+import { ImageIcon, Shield, Smartphone, Globe, QrCode } from "lucide-react";
 
 export function SettingsTab() {
   const [guaranteeImageUrl, setGuaranteeImageUrl] = useState("");
@@ -19,6 +19,7 @@ export function SettingsTab() {
   const [desktopRedirectUrl, setDesktopRedirectUrl] = useState("");
   const [siteTitle, setSiteTitle] = useState("");
   const [faviconUrl, setFaviconUrl] = useState("");
+  const [pixModalDisplayMode, setPixModalDisplayMode] = useState<'qr_and_image' | 'image_only' | 'qr_only'>('qr_and_image');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -115,6 +116,21 @@ export function SettingsTab() {
     
     if (faviconData) {
       setFaviconUrl((faviconData as any).value || '');
+    }
+
+    const { data: pixModalData } = await supabase
+      .from('site_config' as any)
+      .select('*')
+      .eq('key', 'pix_modal_display_mode')
+      .maybeSingle();
+
+    if (pixModalData && (pixModalData as any).value) {
+      const value = (pixModalData as any).value;
+      if (value === 'qr_only' || value === 'image_only') {
+        setPixModalDisplayMode(value);
+      } else {
+        setPixModalDisplayMode('qr_and_image');
+      }
     }
   };
 
@@ -360,6 +376,35 @@ export function SettingsTab() {
     }
   };
 
+  const handleSavePixDisplayMode = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('site_config' as any)
+        .upsert({
+          key: 'pix_modal_display_mode',
+          value: pixModalDisplayMode,
+          updated_at: new Date().toISOString()
+        } as any, {
+          onConflict: 'key'
+        });
+
+      if (error) throw error;
+
+      toast({
+        description: "Preferência do PIX salva",
+      });
+    } catch (error) {
+      console.error('Error saving pix display mode:', error);
+      toast({
+        description: "Erro ao salvar preferência",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Informações do Site (Favicon e Título) */}
@@ -434,6 +479,68 @@ export function SettingsTab() {
             {loading ? "Salvando..." : "Salvar Informações do Site"}
           </Button>
         </div>
+      </Card>
+
+      {/* Preferência do Modal PIX */}
+      <Card className="p-6 bg-gray-900 border-gray-800">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-3 rounded-lg bg-green-600/20">
+            <Smartphone className="h-6 w-6 text-green-400" />
+          </div>
+          <div>
+            <h3 className="text-xl font-semibold text-white">Exibição do Pagamento PIX</h3>
+            <p className="text-sm text-gray-400">Escolha se o cliente verá apenas a imagem tutorial ou também o QR Code</p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3 mb-6">
+          <button
+            type="button"
+            className={`p-4 rounded-xl border transition-all text-left ${pixModalDisplayMode === 'image_only'
+              ? 'border-green-500 bg-green-500/10 text-white'
+              : 'border-gray-800 bg-gray-900 text-gray-300 hover:border-gray-700'}`}
+            onClick={() => setPixModalDisplayMode('image_only')}
+          >
+            <p className="font-semibold mb-1">Somente imagem tutorial</p>
+            <p className="text-sm text-gray-400">
+              Remove o QR Code e mostra apenas a imagem “Pix Copia e Cola” antes das instruções.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            className={`p-4 rounded-xl border transition-all text-left ${pixModalDisplayMode === 'qr_only'
+              ? 'border-green-500 bg-green-500/10 text-white'
+              : 'border-gray-800 bg-gray-900 text-gray-300 hover:border-gray-700'}`}
+            onClick={() => setPixModalDisplayMode('qr_only')}
+          >
+            <p className="font-semibold mb-1">Somente QR Code</p>
+            <p className="text-sm text-gray-400">
+              Exibe apenas o QR Code junto do campo “Copiar código”, sem a imagem tutorial.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            className={`p-4 rounded-xl border transition-all text-left ${pixModalDisplayMode === 'qr_and_image'
+              ? 'border-green-500 bg-green-500/10 text-white'
+              : 'border-gray-800 bg-gray-900 text-gray-300 hover:border-gray-700'}`}
+            onClick={() => setPixModalDisplayMode('qr_and_image')}
+          >
+            <p className="font-semibold mb-1">QR Code + imagem</p>
+            <p className="text-sm text-gray-400">
+              Mostra o QR Code para scanear e mantém a imagem tutorial logo abaixo.
+            </p>
+          </button>
+        </div>
+
+        <Button 
+          onClick={handleSavePixDisplayMode} 
+          disabled={loading}
+          className="bg-green-600 hover:bg-green-700 text-white"
+        >
+          Salvar preferência
+        </Button>
       </Card>
 
       {/* Imagem do Produto Principal */}

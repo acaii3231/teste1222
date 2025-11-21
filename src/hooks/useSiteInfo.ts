@@ -3,10 +3,23 @@ import { useEffect } from 'react';
 export function useSiteInfo() {
   useEffect(() => {
     let isMounted = true;
-    
+
+    const applyFavicon = (href: string) => {
+      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = href;
+    };
+
+    // Fallback inicial para remover ícones do Lovable
+    applyFavicon('/favicon.ico');
+
     const loadSiteInfo = async () => {
       if (!isMounted) return;
-      
+
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         if (!supabaseUrl) return;
@@ -21,29 +34,28 @@ export function useSiteInfo() {
 
         if (!isMounted) return;
 
-        if (titleResult.status === 'fulfilled' && titleResult.value.data?.value) {
-          document.title = titleResult.value.data.value;
+        if (titleResult.status === 'fulfilled') {
+          const newTitle = titleResult.value.data?.value;
+          if (newTitle) {
+            document.title = newTitle;
+          }
         }
 
-        if (faviconResult.status === 'fulfilled' && faviconResult.value.data?.value) {
-          let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
-          if (!link) {
-            link = document.createElement('link');
-            link.rel = 'icon';
-            document.head.appendChild(link);
+        if (faviconResult.status === 'fulfilled') {
+          const newFavicon = faviconResult.value.data?.value;
+          if (newFavicon) {
+            applyFavicon(newFavicon);
           }
-          link.href = faviconResult.value.data.value;
         }
       } catch {
-        // Ignorar erros silenciosamente
+        // Ignorar erros silenciosamente para evitar quebrar o SSR
       }
     };
 
-    const timeoutId = setTimeout(loadSiteInfo, 100);
+    loadSiteInfo();
 
     return () => {
       isMounted = false;
-      clearTimeout(timeoutId);
     };
   }, []);
 }

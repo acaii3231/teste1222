@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Header } from "@/components/Header";
 import { StepTabs } from "@/components/StepTabs";
 import { InputField } from "@/components/InputField";
@@ -10,6 +10,14 @@ import { cpfMask, phoneMask, validateCPF, validateEmail } from "@/utils/masks";
 import { useToast } from "@/hooks/use-toast";
 import { supabaseClient as supabase } from "@/lib/supabase-helpers";
 import { initFacebookPixel, trackInitiateCheckout, trackPurchase, trackAddToCart } from "@/lib/facebook-pixel";
+import { 
+  initTikTokPixel,
+  trackTikTokViewContent,
+  trackTikTokAddToCart,
+  trackTikTokInitiateCheckout,
+  trackTikTokPurchase
+} from "@/lib/tiktok-pixel";
+import { sendTikTokServerEvent } from "@/lib/tiktok-events";
 import { createPix, checkPixStatus } from "@/lib/pix-api";
 import "@/lib/security"; // Carrega proteções de segurança
 
@@ -33,6 +41,8 @@ const Checkout = () => {
   const [loading, setLoading] = useState(false);
   const [isCheckingPayment, setIsCheckingPayment] = useState(false);
   const [purchaseTracked, setPurchaseTracked] = useState(false); // Flag para evitar múltiplos eventos Purchase
+  const [tiktokPurchaseTracked, setTiktokPurchaseTracked] = useState(false);
+  const [tiktokCheckoutTracked, setTiktokCheckoutTracked] = useState(false);
   
   // Upsell state
   interface Upsell {
@@ -72,29 +82,120 @@ const Checkout = () => {
   // Pixel configuration
   const [pixelOnCheckout, setPixelOnCheckout] = useState(false);
   const [pixelOnPurchase, setPixelOnPurchase] = useState(true);
+  const [pixModalDisplayMode, setPixModalDisplayMode] = useState<'qr_and_image' | 'image_only' | 'qr_only'>('qr_and_image');
+  const [tiktokPixelId, setTiktokPixelId] = useState("");
+  const [tiktokAccessToken, setTiktokAccessToken] = useState("");
+  const [tiktokTrackViewContent, setTiktokTrackViewContent] = useState(true);
+  const [tiktokTrackAddToCart, setTiktokTrackAddToCart] = useState(true);
+  const [tiktokTrackCheckout, setTiktokTrackCheckout] = useState(true);
+  const [tiktokTrackPurchase, setTiktokTrackPurchase] = useState(true);
   
   // Payment status
   const [paymentStatus, setPaymentStatus] = useState<string>('pending');
+  const [userIP, setUserIP] = useState('');
+  const [ttclid, setTtclid] = useState<string | null>(null);
+  const [ttp, setTtp] = useState<string | null>(null);
+  const [productName, setProductName] = useState("Oferta Principal");
+  const viewTrackedRef = useRef(false);
+
+  const generateEventId = () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random()}`;
+  };
+
+  const fireTikTokEvent = useCallback((
+    eventName: "ViewContent" | "AddToCart" | "InitiateCheckout" | "Purchase",
+    options: {
+      value?: number;
+      contentName?: string;
+      contentId?: string;
+      contentType?: string;
+      eventId?: string;
+    } = {}
+  ) => {
+    if (!tiktokPixelId) {
+      return;
+    }
+
+    const payload = {
+      value: options.value,
+      currency: "BRL",
+      content_name: options.contentName || productName,
+      content_type: options.contentType || "product",
+      content_id: options.contentId || "main-product",
+    };
+
+    switch (eventName) {
+      case "ViewContent":
+        trackTikTokViewContent(payload);
+        break;
+      case "AddToCart":
+        trackTikTokAddToCart(payload);
+        break;
+      case "InitiateCheckout":
+        trackTikTokInitiateCheckout(payload);
+        break;
+      case "Purchase":
+        trackTikTokPurchase({ ...payload, event_id: options.eventId });
+        break;
+    }
+
+    const currentUrl = typeof window !== "undefined" ? window.location.href : undefined;
+    const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : undefined;
+
+    sendTikTokServerEvent({
+      pixelId: tiktokPixelId,
+      accessToken: tiktokAccessToken,
+      eventName,
+      eventId: options.eventId,
+      value: options.value,
+      currency: "BRL",
+      contentName: payload.content_name,
+      contentType: payload.content_type,
+      contentId: payload.content_id,
+      url: currentUrl,
+      email,
+      phone,
+      externalId: cpf || email || phone || undefined,
+      ip: userIP || undefined,
+      userAgent,
+      ttclid,
+      ttp,
+    });
+  }, [
+    cpf,
+    email,
+    phone,
+    productName,
+    tiktokAccessToken,
+    tiktokPixelId,
+    ttclid,
+    ttp,
+    userIP
+  ]);
 
   // Security: Check mobile-only and IP blocking
   useEffect(() => {
     const checkSecurity = async () => {
       // Get user IP
-      let userIP = '';
+      let detectedIP = '';
       try {
         const ipResponse = await fetch('https://api.ipify.org?format=json');
         const ipData = await ipResponse.json();
-        userIP = ipData.ip;
+        detectedIP = ipData.ip;
+        setUserIP(detectedIP);
       } catch (error) {
         console.error('Error getting IP:', error);
       }
 
       // Check if IP is blocked
-      if (userIP) {
+      if (detectedIP) {
         const { data: blockedIPs } = await supabase
           .from('blocked_ips' as any)
           .select('*')
-          .eq('ip_address', userIP)
+          .eq('ip_address', detectedIP)
           .eq('active', true)
           .maybeSingle();
         
@@ -133,36 +234,124 @@ const Checkout = () => {
     checkSecurity();
   }, []);
 
+  useEffect(() => {
+    try {
+      const hasWindow = typeof window !== 'undefined';
+      if (!hasWindow) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const queryTtclid = params.get('ttclid');
+      if (queryTtclid) {
+        setTtclid(queryTtclid);
+        window.sessionStorage?.setItem('ttclid', queryTtclid);
+      } else {
+        const stored = window.sessionStorage?.getItem('ttclid');
+        if (stored) {
+          setTtclid(stored);
+        }
+      }
+
+      const cookie = document.cookie
+        .split('; ')
+        .find((row) => row.startsWith('_ttp='));
+      if (cookie) {
+        setTtp(cookie.split('=')[1]);
+      }
+    } catch (error) {
+      console.error('Erro ao processar parâmetros do TikTok', error);
+    }
+  }, []);
+
   // Initialize Facebook Pixel
   useEffect(() => {
     const loadPixelConfig = async () => {
       const { data } = await supabase
         .from('site_config' as any)
         .select('*')
-        .in('key', ['facebook_pixel_id', 'pixel_on_checkout', 'pixel_on_purchase']);
+        .in('key', [
+          'facebook_pixel_id',
+          'pixel_on_checkout',
+          'pixel_on_purchase',
+          'tiktok_pixel_id',
+          'tiktok_access_token',
+          'tiktok_track_viewcontent',
+          'tiktok_track_add_to_cart',
+          'tiktok_track_checkout',
+          'tiktok_track_purchase',
+          'pix_modal_display_mode'
+        ]);
       
-      let pixelId = '';
+      let fbPixelId = '';
       let onCheckout = false;
       let onPurchase = true;
+      let tikPixelId = '';
+      let tikAccessToken = '';
+      let tikView = true;
+      let tikAdd = true;
+      let tikCheckout = true;
+      let tikPurchase = true;
+      let modalDisplayMode: 'qr_and_image' | 'image_only' | 'qr_only' = 'qr_and_image';
       
       if (data) {
         (data as any[]).forEach((config: any) => {
-          if (config.key === 'facebook_pixel_id') pixelId = config.value;
+          if (config.key === 'facebook_pixel_id') fbPixelId = config.value;
           if (config.key === 'pixel_on_checkout') onCheckout = config.value === 'true';
           if (config.key === 'pixel_on_purchase') onPurchase = config.value === 'true';
+          if (config.key === 'tiktok_pixel_id') tikPixelId = config.value;
+          if (config.key === 'tiktok_access_token') tikAccessToken = config.value;
+          if (config.key === 'tiktok_track_viewcontent') tikView = config.value !== 'false';
+          if (config.key === 'tiktok_track_add_to_cart') tikAdd = config.value !== 'false';
+          if (config.key === 'tiktok_track_checkout') tikCheckout = config.value !== 'false';
+          if (config.key === 'tiktok_track_purchase') tikPurchase = config.value !== 'false';
+          if (config.key === 'pix_modal_display_mode') {
+            if (config.value === 'image_only' || config.value === 'qr_only') {
+              modalDisplayMode = config.value;
+            } else {
+              modalDisplayMode = 'qr_and_image';
+            }
+          }
         });
       }
       
       setPixelOnCheckout(onCheckout);
       setPixelOnPurchase(onPurchase);
+      setTiktokPixelId(tikPixelId);
+      setTiktokAccessToken(tikAccessToken);
+      setTiktokTrackViewContent(tikView);
+      setTiktokTrackAddToCart(tikAdd);
+      setTiktokTrackCheckout(tikCheckout);
+      setTiktokTrackPurchase(tikPurchase);
+      setPixModalDisplayMode(modalDisplayMode);
       
-      if (pixelId) {
-        initFacebookPixel(pixelId);
+      if (fbPixelId) {
+        initFacebookPixel(fbPixelId);
+      }
+      if (tikPixelId) {
+        initTikTokPixel(tikPixelId);
       }
     };
     
     loadPixelConfig();
   }, []);
+
+  useEffect(() => {
+    if (!tiktokPixelId || !tiktokTrackViewContent || viewTrackedRef.current) return;
+    
+    fireTikTokEvent("ViewContent", {
+      value: mainProductPrice,
+      contentName: productName,
+    });
+    viewTrackedRef.current = true;
+  }, [fireTikTokEvent, mainProductPrice, productName, tiktokPixelId, tiktokTrackViewContent]);
+
+  useEffect(() => {
+    viewTrackedRef.current = false;
+  }, [tiktokPixelId]);
+
+  useEffect(() => {
+    setTiktokPurchaseTracked(false);
+    setTiktokCheckoutTracked(false);
+  }, [pixData?.pixId]);
 
   // Verificação automática instantânea do pagamento (1 segundo)
   useEffect(() => {
@@ -208,6 +397,13 @@ const Checkout = () => {
             trackPurchase(totalValueInReais, 'BRL', pixData.pixId);
             setPurchaseTracked(true); // Marcar como já disparado
           }
+          if (tiktokTrackPurchase && !tiktokPurchaseTracked) {
+            fireTikTokEvent("Purchase", {
+              value: totalValueInReais,
+              eventId: pixData.pixId,
+            });
+            setTiktokPurchaseTracked(true);
+          }
         }
       } catch (error) {
         console.error('Error auto-checking payment:', error);
@@ -222,7 +418,17 @@ const Checkout = () => {
       clearInterval(interval);
       setIsCheckingPayment(false);
     };
-  }, [pixData?.pixId, selectedUpsells, upsells, mainProductPrice, pixelOnPurchase, purchaseTracked]);
+  }, [
+    fireTikTokEvent,
+    mainProductPrice,
+    pixelOnPurchase,
+    pixData?.pixId,
+    purchaseTracked,
+    selectedUpsells,
+    tiktokPurchaseTracked,
+    tiktokTrackPurchase,
+    upsells
+  ]);
 
 
   // Load site info (title and favicon) from database
@@ -238,6 +444,7 @@ const Checkout = () => {
         
         if (titleData && (titleData as any).value) {
           document.title = (titleData as any).value;
+          setProductName((titleData as any).value);
         }
 
         // Carregar favicon
@@ -400,6 +607,17 @@ const Checkout = () => {
             trackPurchase(valueInReais, 'BRL', transactionId);
             setPurchaseTracked(true); // Marcar como já disparado
           }
+          if (newStatus === 'paid' && tiktokTrackPurchase && !tiktokPurchaseTracked) {
+            const totalValue = (payload.new as any).total_value;
+            const valueInReais = typeof totalValue === 'number' ? totalValue : parseFloat(totalValue) || 0;
+            fireTikTokEvent("Purchase", {
+              value: valueInReais,
+              eventId: transactionId || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : `${Date.now()}-${Math.random()}`),
+            });
+            setTiktokPurchaseTracked(true);
+          }
         }
       )
       .subscribe();
@@ -407,7 +625,7 @@ const Checkout = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [transactionId, pixelOnPurchase, purchaseTracked]);
+  }, [fireTikTokEvent, pixelOnPurchase, purchaseTracked, tiktokTrackPurchase, tiktokPurchaseTracked, transactionId]);
 
   const validateStep = (step: number): boolean => {
     // Aceita qualquer dado fornecido - sem validação obrigatória
@@ -634,6 +852,13 @@ const Checkout = () => {
       // Track InitiateCheckout event when opening PIX modal
       if (pixelOnCheckout) {
         trackInitiateCheckout(totalValueInReais, 'BRL');
+      }
+      if (tiktokTrackCheckout && !tiktokCheckoutTracked) {
+        fireTikTokEvent("InitiateCheckout", {
+          value: totalValueInReais,
+          eventId: pixId,
+        });
+        setTiktokCheckoutTracked(true);
       }
       
       setShowPixModal(true);
@@ -890,6 +1115,14 @@ const Checkout = () => {
                         // Track AddToCart event
                         const upsellPrice = parseFloat(upsell.price.replace(/[R$\s]/g, '').replace(',', '.')) || 0;
                         trackAddToCart(upsellPrice);
+                        if (tiktokTrackAddToCart) {
+                          fireTikTokEvent("AddToCart", {
+                            value: upsellPrice,
+                            contentName: upsell.title,
+                            contentId: upsell.id,
+                            contentType: 'upsell'
+                          });
+                        }
                       } else {
                         newSelected.delete(upsell.id);
                       }
@@ -942,6 +1175,7 @@ const Checkout = () => {
           onClose={() => setShowPixModal(false)}
           paymentStatus={pixData.paymentStatus}
           isCheckingPayment={isCheckingPayment}
+          displayMode={pixModalDisplayMode}
         />
       )}
 

@@ -7,10 +7,12 @@ import Checkout from "./pages/Checkout";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useSiteInfo } from "@/hooks/useSiteInfo";
 
 const queryClient = new QueryClient();
 
 const App = () => {
+  useSiteInfo();
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

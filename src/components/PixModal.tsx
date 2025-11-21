@@ -9,6 +9,7 @@ interface PixModalProps {
   paymentStatus?: string;
   isCheckingPayment?: boolean;
   pixId?: string;
+  displayMode?: 'qr_and_image' | 'image_only' | 'qr_only';
 }
 
 export const PixModal = ({ 
@@ -17,7 +18,8 @@ export const PixModal = ({
   onClose, 
   paymentStatus, 
   isCheckingPayment: _isCheckingPayment, // Recebido mas não usado no momento
-  pixId 
+  pixId,
+  displayMode = 'qr_and_image'
 }: PixModalProps) => {
   const [copied, setCopied] = useState(false);
   const [localPaymentStatus, setLocalPaymentStatus] = useState(paymentStatus || 'pending');
@@ -227,6 +229,62 @@ export const PixModal = ({
     );
   }
 
+  const showImage = displayMode === 'qr_and_image' || displayMode === 'image_only';
+  const showQr = displayMode === 'qr_and_image' || displayMode === 'qr_only';
+
+  const imageBlock = showImage ? (
+    <div className="rounded-xl overflow-hidden bg-black/5 mb-4">
+      <img
+        src="https://cnt.recarga.com/landingfiles/photos/pix-copia-e-cola-fazer.webp"
+        alt="Passo a passo Pix Copia e Cola"
+        className="w-full h-full object-cover"
+        loading="lazy"
+      />
+    </div>
+  ) : null;
+
+  const instructionsBlock = (
+    <div className="bg-muted/20 rounded-xl p-4 mb-4 text-left">
+      <h3 className="font-semibold text-foreground mb-3 text-center">Como Pagar:</h3>
+      <ol className="space-y-2 text-sm text-muted-foreground">
+        <li className="flex gap-2">
+          <span className="font-bold text-foreground">1.</span>
+          <span>Abra o app do seu banco</span>
+        </li>
+        <li className="flex gap-2">
+          <span className="font-bold text-foreground">2.</span>
+          <span>Escolha a opção <strong className="text-foreground">Pix Copia e Cola</strong></span>
+        </li>
+        <li className="flex gap-2">
+          <span className="font-bold text-foreground">3.</span>
+          <span>Cole o código PIX abaixo</span>
+        </li>
+        <li className="flex gap-2">
+          <span className="font-bold text-foreground">4.</span>
+          <span>Confirme o pagamento</span>
+        </li>
+      </ol>
+    </div>
+  );
+
+  const qrBlock = showQr && qrCodeBase64 && qrCodeBase64 !== qrCode ? (
+    <div className="bg-muted/30 p-4 rounded-xl mb-4">
+      <p className="text-xs text-muted-foreground mb-2 text-center font-medium">
+        Ou escaneie o QR Code:
+      </p>
+      <img 
+        src={qrCodeBase64.startsWith('data:') ? qrCodeBase64 : `data:image/png;base64,${qrCodeBase64}`} 
+        alt="QR Code do PIX" 
+        className="w-full max-w-[300px] mx-auto rounded-lg shadow-sm"
+        onError={(e) => {
+          if (!qrCodeBase64.startsWith('data:')) {
+            (e.target as HTMLImageElement).src = qrCodeBase64;
+          }
+        }}
+      />
+    </div>
+  ) : null;
+
   return (
     <div 
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
@@ -252,47 +310,32 @@ export const PixModal = ({
             Siga os passos abaixo para fazer o pagamento
           </p>
 
-          {/* QR Code */}
-          {qrCodeBase64 && qrCodeBase64 !== qrCode && (
-            <div className="bg-muted/30 p-4 rounded-xl mb-4">
-              <p className="text-xs text-muted-foreground mb-2 text-center font-medium">
-                Ou escaneie o QR Code:
-              </p>
-              <img 
-                src={qrCodeBase64.startsWith('data:') ? qrCodeBase64 : `data:image/png;base64,${qrCodeBase64}`} 
-                alt="QR Code do PIX" 
-                className="w-full max-w-[300px] mx-auto rounded-lg shadow-sm"
-                onError={(e) => {
-                  if (!qrCodeBase64.startsWith('data:')) {
-                    (e.target as HTMLImageElement).src = qrCodeBase64;
-                  }
-                }}
-              />
-            </div>
+          {/* Render order based on mode */}
+          {displayMode === 'image_only' && (
+            <>
+              {imageBlock}
+              {instructionsBlock}
+            </>
           )}
 
-          {/* Instruções */}
-          <div className="bg-muted/20 rounded-xl p-4 mb-4 text-left">
-            <h3 className="font-semibold text-foreground mb-3 text-center">Como Pagar:</h3>
-            <ol className="space-y-2 text-sm text-muted-foreground">
-              <li className="flex gap-2">
-                <span className="font-bold text-foreground">1.</span>
-                <span>Abra o app do seu banco</span>
-              </li>
-              <li className="flex gap-2">
-                <span className="font-bold text-foreground">2.</span>
-                <span>Escolha a opção <strong className="text-foreground">Pix Copia e Cola</strong></span>
-              </li>
-              <li className="flex gap-2">
-                <span className="font-bold text-foreground">3.</span>
-                <span>Cole o código PIX abaixo</span>
-              </li>
-              <li className="flex gap-2">
-                <span className="font-bold text-foreground">4.</span>
-                <span>Confirme o pagamento</span>
-              </li>
-            </ol>
-          </div>
+          {displayMode === 'qr_and_image' && (
+            <>
+              {instructionsBlock}
+              {imageBlock}
+            </>
+          )}
+
+          {displayMode === 'qr_only' ? (
+            <>
+              {qrBlock}
+              {instructionsBlock}
+            </>
+          ) : (
+            <>
+              {instructionsBlock}
+              {qrBlock}
+            </>
+          )}
 
           {/* Código PIX */}
           <div className="bg-muted/20 rounded-xl p-4 mb-4">

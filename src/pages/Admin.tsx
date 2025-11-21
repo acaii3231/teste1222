@@ -39,8 +39,14 @@ const Admin = () => {
   const [password, setPassword] = useState("");
   const [facebookPixelId, setFacebookPixelId] = useState("1352925696565772");
   const [facebookToken, setFacebookToken] = useState("EAAQmsFtPWZA4BP9ZALSFn9BrwBtrxW9tGpJz6ZBkPJXpswI0eS9BAoYm5kyhEm5PHiNZA5bSudEF7BACGnrnUruhc7YNOqrEfHxneWJYb6CF1ZAc1oqzwPvo5m6jHrZAXTZC9CeOXV5S4rVXcekylZCEuoDetyyfEjRuGwmeQZCQiZCvcEdh8VXFSZA7gcTVyuMZBw1qWwZDZD");
+  const [tiktokPixelId, setTiktokPixelId] = useState("D4G5SC3C77U1VUV8KOS0");
+  const [tiktokAccessToken, setTiktokAccessToken] = useState("23000e4ab10292aeebe600f60d376b60f2291786");
   const [pixelOnCheckout, setPixelOnCheckout] = useState(true);
   const [pixelOnPurchase, setPixelOnPurchase] = useState(true);
+  const [tiktokTrackViewContent, setTiktokTrackViewContent] = useState(true);
+  const [tiktokTrackAddToCart, setTiktokTrackAddToCart] = useState(true);
+  const [tiktokTrackCheckout, setTiktokTrackCheckout] = useState(true);
+  const [tiktokTrackPurchase, setTiktokTrackPurchase] = useState(true);
   const [isLoading, setIsLoading] = useState(() => {
     // Se não está logado, não precisa carregar
     const saved = localStorage.getItem('admin_logged_in');
@@ -78,6 +84,8 @@ const Admin = () => {
 
   // Transactions from database
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [backupsAvailable, setBackupsAvailable] = useState(true);
 
   // Função para carregar configurações do pixel
   const loadPixelConfig = async () => {
@@ -85,7 +93,18 @@ const Admin = () => {
       const { data, error } = await supabase
         .from('site_config' as any)
         .select('*')
-        .in('key', ['facebook_pixel_id', 'facebook_token', 'pixel_on_checkout', 'pixel_on_purchase']);
+        .in('key', [
+          'facebook_pixel_id',
+          'facebook_token',
+          'pixel_on_checkout',
+          'pixel_on_purchase',
+          'tiktok_pixel_id',
+          'tiktok_access_token',
+          'tiktok_track_viewcontent',
+          'tiktok_track_add_to_cart',
+          'tiktok_track_checkout',
+          'tiktok_track_purchase'
+        ]);
       
       if (error) return;
       
@@ -95,6 +114,12 @@ const Admin = () => {
           if (config.key === 'facebook_token') setFacebookToken(config.value);
           if (config.key === 'pixel_on_checkout') setPixelOnCheckout(config.value === 'true');
           if (config.key === 'pixel_on_purchase') setPixelOnPurchase(config.value === 'true');
+          if (config.key === 'tiktok_pixel_id') setTiktokPixelId(config.value);
+          if (config.key === 'tiktok_access_token') setTiktokAccessToken(config.value);
+          if (config.key === 'tiktok_track_viewcontent') setTiktokTrackViewContent(config.value !== 'false');
+          if (config.key === 'tiktok_track_add_to_cart') setTiktokTrackAddToCart(config.value !== 'false');
+          if (config.key === 'tiktok_track_checkout') setTiktokTrackCheckout(config.value !== 'false');
+          if (config.key === 'tiktok_track_purchase') setTiktokTrackPurchase(config.value !== 'false');
         });
       }
     } catch (error) {
@@ -281,6 +306,12 @@ const Admin = () => {
       { key: 'facebook_token', value: facebookToken },
       { key: 'pixel_on_checkout', value: String(pixelOnCheckout) },
       { key: 'pixel_on_purchase', value: String(pixelOnPurchase) },
+      { key: 'tiktok_pixel_id', value: tiktokPixelId },
+      { key: 'tiktok_access_token', value: tiktokAccessToken },
+      { key: 'tiktok_track_viewcontent', value: String(tiktokTrackViewContent) },
+      { key: 'tiktok_track_add_to_cart', value: String(tiktokTrackAddToCart) },
+      { key: 'tiktok_track_checkout', value: String(tiktokTrackCheckout) },
+      { key: 'tiktok_track_purchase', value: String(tiktokTrackPurchase) },
     ];
     
     for (const config of configs) {
@@ -427,154 +458,114 @@ const Admin = () => {
     if (!confirmClear) return;
 
     try {
-      // 1. Fazer backup antes de deletar
-      const { data: transactionsData, error: fetchError } = await supabase
-        .from('transactions' as any)
-        .select('*');
-      
-      if (fetchError) {
-        toast({
-          description: "Erro ao fazer backup",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Criar backup no Supabase
-      const backupData = {
-        transactions: transactionsData || [],
-        backup_date: new Date().toISOString(),
-        transaction_count: transactionsData?.length || 0
-      };
-
-      const { error: backupError } = await supabase
-        .from('backups' as any)
-        .insert({
-          name: `Backup Automático - ${new Date().toLocaleString('pt-BR')}`,
-          data: backupData,
-          description: `Backup automático antes de limpar métricas. ${transactionsData?.length || 0} transações.`
-        } as any);
-
-      if (backupError) {
-        toast({
-          description: "Erro ao criar backup, mas continuando...",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          description: "Backup criado com sucesso!",
-        });
-      }
-
-      // 2. Deletar todas as transações - MÚLTIPLAS ABORDAGENS
-      try {
-        // ABORDAGEM 1: Tentar usar função RPC (mais rápida)
-        const { data: rpcResult, error: rpcError } = await supabase
-          .rpc('delete_all_transactions' as any);
-        
-        if (!rpcError && rpcResult !== null && rpcResult !== undefined) {
-          await loadTransactions();
-          toast({
-            description: `${rpcResult} transações deletadas com sucesso!`,
-          });
-          return;
-        }
-        
-        // ABORDAGEM 2: Buscar todos os IDs e deletar
-        const { data: allTransactions, error: fetchError } = await supabase
-          .from('transactions' as any)
-          .select('id');
-        
-        if (fetchError) {
-          throw fetchError;
-        }
-
-        if (!allTransactions || allTransactions.length === 0) {
-          toast({
-            description: "Nenhuma transação encontrada",
-          });
-          await loadTransactions();
-          return;
-        }
-
-        const ids = allTransactions.map((t: any) => t.id);
-        
-        // ABORDAGEM 3: Deletar usando .in() com todos os IDs de uma vez
-        const { error: deleteAllError } = await supabase
-          .from('transactions' as any)
-          .delete()
-          .in('id', ids);
-        
-        if (!deleteAllError) {
-          await loadTransactions();
-          toast({
-            description: `${ids.length} transações deletadas com sucesso!`,
-          });
-          return;
-        }
-        
-        // ABORDAGEM 4: Deletar em lotes pequenos (5 por vez)
-        let deletedCount = 0;
-        let errorCount = 0;
-        
-        for (let i = 0; i < ids.length; i += 5) {
-          const batch = ids.slice(i, i + 5);
-          
-          const { error: batchError } = await supabase
+      // 1. Fazer backup antes de deletar (se habilitado)
+      if (backupsAvailable) {
+        try {
+          const { data: transactionsData, error: fetchError } = await supabase
             .from('transactions' as any)
-            .delete()
-            .in('id', batch);
+            .select('*');
           
-          if (batchError) {
-            // Tentar deletar uma por uma neste lote
-            for (const id of batch) {
-              const { error: singleError } = await supabase
-                .from('transactions' as any)
-                .delete()
-                .eq('id', id);
-              
-              if (singleError) {
-                errorCount++;
-              } else {
-                deletedCount++;
-              }
+          if (fetchError) {
+            throw fetchError;
+          }
+
+          const backupData = {
+            transactions: transactionsData || [],
+            backup_date: new Date().toISOString(),
+            transaction_count: transactionsData?.length || 0
+          };
+
+          const { error: backupError } = await supabase
+            .from('backups' as any)
+            .insert({
+              name: `Backup Automático - ${new Date().toLocaleString('pt-BR')}`,
+              data: backupData,
+              description: `Backup automático antes de limpar métricas. ${transactionsData?.length || 0} transações.`
+            } as any);
+
+          if (backupError) {
+            const message = `${backupError.message || ''}`.toLowerCase();
+            const details = `${backupError.details || ''}`.toLowerCase();
+            if (
+              backupError.code === 'PGRST116' ||
+              message.includes('backups') ||
+              details.includes('backups') ||
+              message.includes('does not exist')
+            ) {
+              setBackupsAvailable(false);
+              toast({
+                description: "Tabela de backups não encontrada. Desativando backups automáticos.",
+              });
+            } else {
+              toast({
+                description: "Erro ao criar backup, continuando limpeza.",
+                variant: "destructive",
+              });
             }
           } else {
-            deletedCount += batch.length;
+            toast({
+              description: "Backup criado com sucesso!",
+            });
+          }
+        } catch (backupError: any) {
+          const message = `${backupError?.message || ''}`.toLowerCase();
+          if (message.includes('backups') || message.includes('does not exist')) {
+            setBackupsAvailable(false);
+            toast({
+              description: "Tabela de backups não existe. Backups automáticos desativados.",
+            });
+          } else {
+            toast({
+              description: "Erro ao criar backup, continuando limpeza.",
+              variant: "destructive",
+            });
           }
         }
-        
-        if (errorCount > 0 && deletedCount === 0) {
+      }
+
+      // 2. Remover referências em blocked_ips (evita violar FK)
+      const { error: blockedError } = await supabase
+        .from('blocked_ips' as any)
+        .delete()
+        .not('transaction_id', 'is', null as any);
+
+      if (blockedError) {
+        const blockedMsg = `${blockedError.message || ''}`.toLowerCase();
+        const blockedDetails = `${blockedError.details || ''}`.toLowerCase();
+        // Ignorar se a tabela não existir
+        if (
+          blockedError.code !== 'PGRST116' &&
+          !blockedMsg.includes('blocked_ips') &&
+          !blockedDetails.includes('blocked_ips') &&
+          !blockedMsg.includes('does not exist')
+        ) {
+          console.error('Erro ao remover blocked_ips:', blockedError);
           toast({
-            description: `❌ Erro ao deletar. Execute o SQL no Supabase para criar a função RPC.`,
+            description: blockedError.message || "Erro ao limpar IPs bloqueados.",
             variant: "destructive",
           });
           return;
         }
-        
-        if (errorCount > 0) {
-          toast({
-            description: `${deletedCount} deletadas, ${errorCount} erros.`,
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            description: `✅ ${deletedCount} transações deletadas com sucesso!`,
-          });
-        }
-      } catch (error: any) {
+      }
+
+      // 3. Deletar todas as transações em uma única chamada
+      const { error: deleteError, count } = await supabase
+        .from('transactions' as any)
+        .delete({ count: 'exact' } as any)
+        .not('id', 'is', null as any);
+      
+      if (deleteError) {
+        console.error('Erro ao deletar transações:', deleteError);
         toast({
-          description: `Erro: ${error.message || 'Erro desconhecido'}.`,
+          description: deleteError.message || "Erro ao deletar transações. Verifique as permissões no Supabase.",
           variant: "destructive",
         });
         return;
       }
-      
-      // Reload transactions
+
       await loadTransactions();
-      
       toast({
-        description: "Métricas e transações limpas com sucesso!",
+        description: `${count ?? 0} transações deletadas com sucesso!`,
       });
     } catch (error: any) {
       toast({
@@ -585,6 +576,13 @@ const Admin = () => {
   };
 
   const handleRestoreBackup = async (backupId: string) => {
+    if (!backupsAvailable) {
+      toast({
+        description: "Funcionalidade de backup indisponível neste projeto.",
+        variant: "destructive",
+      });
+      return;
+    }
     const confirmRestore = window.confirm(
       "Tem certeza que deseja restaurar este backup? Todas as transações atuais serão substituídas."
     );
@@ -724,8 +722,6 @@ const Admin = () => {
       </div>
     );
   }
-
-  const [activeTab, setActiveTab] = useState("dashboard");
 
   // Mostrar loading enquanto carrega dados
   if (isLoading) {
@@ -974,7 +970,8 @@ const Admin = () => {
               stats={dashboardStats} 
               transactions={transactions}
               onClearMetrics={handleClearMetrics}
-              onRestoreBackup={handleRestoreBackup}
+              onRestoreBackup={backupsAvailable ? handleRestoreBackup : undefined}
+              backupsAvailable={backupsAvailable}
               onRefresh={async () => {
                 await Promise.all([
                   loadTransactions(),
@@ -1064,6 +1061,75 @@ const Admin = () => {
                     <label htmlFor="purchase" className="text-sm text-gray-300">
                       Disparar pixel após compra concluída
                     </label>
+                  </div>
+                </div>
+                <div className="space-y-3 pt-4 border-t border-gray-800">
+                  <h3 className="text-sm font-semibold text-gray-300">TikTok Pixel</h3>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Pixel ID
+                    </label>
+                    <input
+                      type="text"
+                      value={tiktokPixelId}
+                      onChange={(e) => setTiktokPixelId(e.target.value)}
+                      placeholder="Cole o ID do pixel TikTok"
+                      className="w-full h-11 px-4 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Token de Acesso
+                    </label>
+                    <input
+                      type="text"
+                      value={tiktokAccessToken}
+                      onChange={(e) => setTiktokAccessToken(e.target.value)}
+                      placeholder="Cole o token do Events API"
+                      className="w-full h-11 px-4 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                    />
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="tiktok-viewcontent"
+                        checked={tiktokTrackViewContent}
+                        onCheckedChange={(checked) => setTiktokTrackViewContent(checked as boolean)}
+                      />
+                      <label htmlFor="tiktok-viewcontent" className="text-sm text-gray-300">
+                        Disparar ViewContent
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="tiktok-addtocart"
+                        checked={tiktokTrackAddToCart}
+                        onCheckedChange={(checked) => setTiktokTrackAddToCart(checked as boolean)}
+                      />
+                      <label htmlFor="tiktok-addtocart" className="text-sm text-gray-300">
+                        Disparar AddToCart
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="tiktok-checkout"
+                        checked={tiktokTrackCheckout}
+                        onCheckedChange={(checked) => setTiktokTrackCheckout(checked as boolean)}
+                      />
+                      <label htmlFor="tiktok-checkout" className="text-sm text-gray-300">
+                        Disparar InitiateCheckout
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="tiktok-purchase"
+                        checked={tiktokTrackPurchase}
+                        onCheckedChange={(checked) => setTiktokTrackPurchase(checked as boolean)}
+                      />
+                      <label htmlFor="tiktok-purchase" className="text-sm text-gray-300">
+                        Disparar Purchase
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <Button 

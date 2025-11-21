@@ -25,21 +25,26 @@ interface DashboardTabProps {
   onClearMetrics: () => void;
   onRefresh: () => void;
   onRestoreBackup?: (backupId: string) => void;
+  backupsAvailable?: boolean;
 }
 
-export function DashboardTab({ stats, transactions, onClearMetrics, onRefresh, onRestoreBackup }: DashboardTabProps) {
+export function DashboardTab({ stats, transactions, onClearMetrics, onRefresh, onRestoreBackup, backupsAvailable = true }: DashboardTabProps) {
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const [backups, setBackups] = useState<any[]>([]);
   const [showBackups, setShowBackups] = useState(false);
   const { toast } = useToast();
+  const backupsEnabled = backupsAvailable && !!onRestoreBackup;
 
   // Carregar backups
   useEffect(() => {
+    if (!backupsEnabled) return;
     loadBackups();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backupsEnabled]);
 
   const loadBackups = async () => {
+    if (!backupsEnabled) return;
     try {
       const { data, error } = await supabase
         .from('backups' as any)
@@ -47,9 +52,20 @@ export function DashboardTab({ stats, transactions, onClearMetrics, onRefresh, o
         .order('created_at', { ascending: false })
         .limit(10);
       
-      // Se a tabela não existir (404), apenas ignorar silenciosamente
-      if (error && error.code !== 'PGRST116') {
-        // PGRST116 = tabela não encontrada, ignorar
+      if (error) {
+        const message = `${error.message || ''}`.toLowerCase();
+        const details = `${error.details || ''}`.toLowerCase();
+        // ignorar se tabela não existir
+        if (
+          error.code === 'PGRST116' ||
+          message.includes('404') ||
+          message.includes('backups') ||
+          details.includes('404') ||
+          details.includes('backups')
+        ) {
+          return;
+        }
+        console.error('Erro ao carregar backups:', error);
         return;
       }
       
@@ -57,10 +73,15 @@ export function DashboardTab({ stats, transactions, onClearMetrics, onRefresh, o
         setBackups(data);
       }
     } catch (error: any) {
-      // Ignorar erros de tabela não encontrada
-      if (error?.code === 'PGRST116' || error?.message?.includes('404')) {
+      const message = `${error?.message || ''}`.toLowerCase();
+      if (
+        error?.code === 'PGRST116' ||
+        message.includes('404') ||
+        message.includes('backups')
+      ) {
         return;
       }
+      console.error('Erro inesperado ao carregar backups:', error);
     }
   };
 
@@ -330,12 +351,20 @@ export function DashboardTab({ stats, transactions, onClearMetrics, onRefresh, o
           </Button>
           <Button 
             onClick={() => {
+              if (!backupsEnabled) {
+                toast({
+                  description: "Funcionalidade de backup indisponível neste projeto.",
+                  variant: "destructive",
+                });
+                return;
+              }
               setShowBackups(!showBackups);
               if (!showBackups) {
                 loadBackups();
               }
             }} 
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className={`text-white ${backupsEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 cursor-not-allowed'}`}
+            disabled={!backupsEnabled}
             size="sm"
           >
             <History className="w-4 h-4 mr-2" />
@@ -345,7 +374,7 @@ export function DashboardTab({ stats, transactions, onClearMetrics, onRefresh, o
       </Card>
 
       {/* Lista de Backups */}
-      {showBackups && (
+      {showBackups && backupsEnabled && (
         <Card className="p-6 bg-gray-900 border-gray-800">
           <h3 className="text-lg font-semibold text-white mb-4">Backups Disponíveis</h3>
           {backups.length === 0 ? (

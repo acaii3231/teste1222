@@ -13,6 +13,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/tiktok-events"
+  to = "/.netlify/functions/tiktok-events"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

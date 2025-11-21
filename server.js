@@ -2,6 +2,7 @@
 // Simula as rotas da API do Vercel
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 const app = express();
 
 const PORT = 3000;
@@ -13,6 +14,11 @@ const WEBHOOK_URL = process.env.WEBHOOK_URL || 'https://webhook.site/unique-id-a
 
 app.use(cors());
 app.use(express.json());
+
+const hashValue = (value) => {
+  if (!value) return undefined;
+  return crypto.createHash('sha256').update(value.trim().toLowerCase()).digest('hex');
+};
 
 // Rota para criar PIX
 app.post('/api/pix/create', async (req, res) => {
@@ -143,10 +149,103 @@ app.get('/api/pix/check-by-pixid/:id', async (req, res) => {
   }
 });
 
+// Rota para enviar eventos para o TikTok (equivalente à função Netlify)
+app.post('/api/tiktok-events', async (req, res) => {
+  try {
+    const {
+      pixelId,
+      accessToken,
+      eventName,
+      eventId,
+      value,
+      currency,
+      contentName,
+      contentType,
+      contentId,
+      url,
+      email,
+      phone,
+      externalId,
+      ip,
+      userAgent,
+      ttclid,
+      ttp,
+    } = req.body || {};
+
+    if (!pixelId || !accessToken || !eventName) {
+      return res.status(400).json({
+        message: 'pixelId, accessToken e eventName são obrigatórios'
+      });
+    }
+
+    const properties = {};
+    if (value !== undefined) properties.value = value;
+    if (currency) properties.currency = currency;
+    if (contentName) properties.content_name = contentName;
+    if (contentType) properties.content_type = contentType;
+    if (contentId) properties.content_id = contentId;
+    if (url) properties.url = url;
+
+    const user = {};
+    const hashedEmail = hashValue(email);
+    const hashedPhone = hashValue(phone);
+    const hashedExternalId = hashValue(externalId);
+    if (hashedEmail) user.email = [hashedEmail];
+    if (hashedPhone) user.phone = [hashedPhone];
+    if (hashedExternalId) user.external_id = [hashedExternalId];
+    if (ip) user.ip = ip;
+    if (userAgent) user.user_agent = userAgent;
+    if (ttclid) user.ttclid = ttclid;
+    if (ttp) user.ttp = ttp;
+
+    const payload = {
+      event_source: 'web',
+      event_source_id: pixelId,
+      data: [
+        {
+          event: eventName,
+          event_id: eventId || `${eventName}-${Date.now()}`,
+          timestamp: Math.floor(Date.now() / 1000),
+          properties,
+          user,
+        },
+      ],
+    };
+
+    const response = await fetch('https://business-api.tiktok.com/open_api/v1.3/event/track/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Access-Token': accessToken,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error('❌ TikTok Events API error:', data);
+      return res.status(response.status).json(data);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    console.error('❌ Erro interno TikTok Events:', error);
+    return res.status(500).json({
+      message: 'Erro interno ao enviar evento para o TikTok',
+      error: error.message,
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Servidor API rodando em http://localhost:${PORT}`);
   console.log(`📡 Endpoints disponíveis:`);
   console.log(`   POST http://localhost:${PORT}/api/pix/create`);
   console.log(`   GET  http://localhost:${PORT}/api/pix/check-by-pixid/:id`);
+  console.log(`   POST http://localhost:${PORT}/api/tiktok-events`);
 });
 
